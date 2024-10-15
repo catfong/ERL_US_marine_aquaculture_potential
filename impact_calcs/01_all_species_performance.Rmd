@@ -1,0 +1,228 @@
+---
+title: "All Species Performance"
+author: "Cat Fong"
+date: "2023-07-18"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+Objective:
+The goal of this script is to take the species temperature performance data, calculate slope functions for the data using the max growth rate as 1. Then we will use the slope functions to generate raster layers of the species' performance at each raster cell for each year and warming scenario.
+
+Packages
+```{r read in data}
+library(tidyverse)
+library(terra)
+library(cowplot)
+library(ggplot2)
+```
+
+Data Paths
+```{r read in data}
+species_data_path <- "/home/shares/aquaculture/AOA_climate_change/raw_data/"
+growth_save_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_calcs/"
+temp_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/"
+#depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/halleys_company/"
+functions_path <- here::here("impact_calcs/custom_functions/")
+
+```
+
+## Read Species Data and Generate Slope Equations
+This section will read in the species data that contains the common_name, scientific_name, taxa, low temperature threshold, high temperature threshold and optimal growth temperature. It will be assumed that no growth occurs for a species when outside of its low and high temperature range.
+
+```{r}
+# read in the data
+species_data_raw <- read.csv(paste0(species_data_path, "species_temp_aquaculture_downloaded_07_31_2023.csv"))
+
+# Generate slope equations for the species
+species_data <- species_data_raw %>% 
+  # clean column names
+  janitor::clean_names() %>% 
+  # select rows of interest 
+  select(common_name, species_name, taxa = broad_taxa, low, high, optimal) %>% 
+  # add in max growth rate of 1
+  mutate(max_growth = 1) %>% 
+  # add slope and intercept columns for finding growth rates later
+  mutate(growth_increase_slope = (max_growth - 0)/(optimal - low),           
+         growth_decrease_slope = (0 - max_growth)/(high - optimal),
+         intercept_increase = max_growth - (growth_increase_slope*optimal),
+         intercept_decrease = max_growth - (growth_decrease_slope*optimal))
+
+write.csv(species_data, paste0(growth_save_path, "species_growth_equations.csv"), row.names = FALSE)
+
+```
+
+Below is code for a simple plot to see the growth equations across different species. It serves as a check to make sure the above chunk works as intended.
+```{r}
+#pivot longer to make data easier to graph
+# growth_plot_data <- species_data %>% 
+#   pivot_longer(cols = low:optimal,
+#                names_to = "temp_type",
+#                values_to = "temp_C") %>% 
+#   relocate(c(temp_type, temp_C),
+#            .after = taxa) %>% 
+#   mutate(growth_rate = case_when(temp_type == "optimal" ~ max_growth,
+#                                  TRUE ~ 0))
+# 
+# # make graph to check
+# ggplot(data = growth_plot_data,
+#        aes(x = temp_C,
+#            y = growth_rate,
+#            color = common_name)) +
+#   geom_point() +
+#   geom_line()
+```
+
+## Calculate Species Performance
+The below section has multiple steps to ultimately calculate species performance under different warming scenarios and timeframes. The section uses a variety of custom functions that are showcased and explained below.
+
+### Variable Extract Function from `actea_sst.qmd`
+As there is no way to easily make the temperature raster stacks separable by variable (ie. mean, mean_min, abs_max, etc.) the below function `var_extract` was made using stringr. With this function the temperature raster stacks can be re-separated by variable if desired. This function was originally made in the `actea_sst.qmd` script, however it was brought to this script because it has the same required functionality. 
+
+```{r}
+source(file = paste0(functions_path, "var_extract.R"))
+```
+
+
+### Make Species Performance Raster for a Given Species
+The goal of this function is to make a raster of a given species growth performance across all months in the provided temperature raster.
+The variables are as follows:
+
+- `species_name` is a species name from the `species_data` data.frame made in the first section of this Rmd
+- `species_data`  is the data.frame made in the first section of this Rmd
+- `temperature_raster` is the specified raster of sea surface temperature for the warming scenario and time period of interest
+- `variable` is the variable we want to use for performance calculations that will be extracted from the `temperature_raster` (ie. mean, abs_max, etc.)
+
+```{r}
+source(file = paste0(functions_path, "species_monthly_performance.R"))
+```
+
+
+Test to make sure function works by testing on three species and months!
+```{r}
+species_data <- read.csv("/home/shares/aquaculture/AOA_climate_change/pressure_calcs/species_growth_equations.csv")
+monthly_sst_126_2011_2030 <- terra::rast(paste0(temp_raster_path, "monthly_sst_126_2011_2030.tif"))
+
+ribbon_kelp_monthly_126_2011_2030 <- species_monthly_performance(species_name = "ribbon kelp",
+                                                                 species_data = species_data,
+                                                                 temperature_raster = monthly_sst_126_2011_2030,
+                                                                 variable = "mean")
+
+terra::plot(ribbon_kelp_monthly_126_2011_2030$January_growth,
+            colNA = "grey")
+
+atlantic_salmon_monthly_126_2011_2030 <- species_monthly_performance(species_name = "Atlantic salmon",
+                                                                     species_data = species_data,
+                                                                     temperature_raster = monthly_sst_126_2011_2030,
+                                                                     variable = "mean")
+
+terra::plot(atlantic_salmon_monthly_126_2011_2030$May_growth,
+            colNA = "grey")
+
+European_flat_oyster_monthly_126_2011_2030 <- species_monthly_performance(species_name = "European flat oyster",
+                                                                          species_data = species_data,
+                                                                          temperature_raster = monthly_sst_126_2011_2030,
+                                                                          variable = "mean")
+
+terra::plot(European_flat_oyster_monthly_126_2011_2030$July_growth,
+            colNA = "grey")
+```
+
+### Take mean of each monthly performance stack
+The goal of this function is to take the `species_monthly_raster` function made in the chunk above and take the mean of the monthly performance of the species across all 12 months. The variables are as follows:
+
+- `species_name` is a species name from the `species_data` data.frame made in the first section of this Rmd
+- `species_data`  is the data.frame made in the first section of this Rmd
+- `temperature_raster` is the specified raster of sea surface temperature for the warming scenario and time period of interest
+- `variable` is the variable we want to use for performance calculations that will be extracted from the `temperature_raster` (ie. mean, abs_max, etc.)
+
+```{r}
+source(file = paste0(functions_path, "species_time_period_performance.R"))
+```
+
+Test to make sure function works by testing on two species and months!
+```{r}
+ribbon_kelp_126_2011_2030 <- species_time_period_performance(species_name = "ribbon kelp",
+                                                             species_data = species_data,
+                                                             temperature_raster = monthly_sst_126_2011_2030,
+                                                             variable = "mean")
+terra::plot(ribbon_kelp_126_2011_2030$ribbon_kelp_mean,
+            colNA = "grey")
+
+atlantic_salmon_126_2011_2030 <- species_time_period_performance(species_name = "Atlantic salmon",
+                                                                 species_data = species_data,
+                                                                 temperature_raster = monthly_sst_126_2011_2030,
+                                                                 variable = "mean")
+terra::plot(atlantic_salmon_126_2011_2030$atlantic_salmon_mean,
+            colNA = "grey")
+
+European_flat_oyster_126_2011_2030 <- species_time_period_performance(species_name = "European flat oyster",
+                                                                 species_data = species_data,
+                                                                 temperature_raster = monthly_sst_126_2011_2030,
+                                                                 variable = "mean")
+terra::plot(European_flat_oyster_126_2011_2030$european_flat_oyster_mean,
+            colNA = "grey")
+```
+
+### Make big raster stack function of each seaweed species for each warming scenario and timespan
+The below function, `all_species_stack_maker` takes the species data and temperature data raster as inputs and generates a raster of each species performance for the provided raster. To do this the function uses the two functions made above, `species_monthly_performance` and `species_time_period_performance`. The variable inputs for the function are:
+
+- `species_data` is the data.frame made in the first section of this Rmd
+- `temperature raster` is the specified raster of sea surface temperature for the warming scenario and time period of interest
+
+```{r}
+source(file = paste0(functions_path, "all_species_stack_maker.R"))
+```
+
+```{r}
+test_rast <- all_species_stack_maker(species_data = species_data,
+                                     temperature_raster = monthly_sst_126_2011_2030)
+test_rast
+
+terra::plot(test_rast$giant_kelp_mean_seaweed,
+            colNA = "grey",
+            col = grDevices::hcl.colors(n = 70, palette = "viridis", rev = TRUE),
+            main = "Giant Kelp Mean Growth Performance - Current")
+```
+
+
+Apply function to each time period and warming scenario. This takes about 12 minutes to run to completion.
+
+```{r}
+temp_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/"
+save_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/all_species_index/"
+species_data <- read.csv("/home/shares/aquaculture/AOA_climate_change/pressure_calcs/species_growth_equations.csv")
+functions_path <- here::here("impact_calcs/custom_functions/")
+overwrite <- TRUE
+
+# source custom functions
+source(file = paste0(functions_path, "var_extract.R"))
+source(file = paste0(functions_path, "species_monthly_performance.R"))
+source(file = paste0(functions_path, "species_time_period_performance.R"))
+source(file = paste0(functions_path, "all_species_stack_maker.R"))
+
+# list monthly sst files from temp_raster_path
+temp_files_list <- list.files(temp_raster_path, pattern = "monthly")
+
+
+for (i in 1:n_distinct(temp_files_list)) {
+  # extract the scenario and time period
+  scenario_years <- stringr::str_sub(string = temp_files_list[i],
+                                     start = -17,
+                                     end = -5)
+  
+  # read in the monthly sst data for that scenario and time period
+  monthly_scenario_rast <- terra::rast(paste0(temp_raster_path, "monthly_sst_", scenario_years, ".tif"))
+  
+  # apply the all_species_stack_maker function to this monthly_sst_raster
+  species_stack <- all_species_stack_maker(species_data = species_data,
+                                           temperature_raster = monthly_scenario_rast)
+  
+  # save raster
+  writeRaster(x = species_stack,
+              filename = paste0(save_path, "all_species_", scenario_years, ".tif"),
+              gdal="COMPRESS=NONE",
+              overwrite = overwrite)
+}
+```

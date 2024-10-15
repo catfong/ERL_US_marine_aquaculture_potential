@@ -1,0 +1,335 @@
+---
+title: "Maps breaks code"
+output: html_document
+date: "2023-08-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+The objective of this Rmd is to determine the best scales to use in the difference_maps_with_max_min script for the figures.
+
+Packages
+```{r}
+library(tidyverse)
+library(terra)
+library(ggplot2)
+library(ggmap)
+library(cowplot)
+library(rnaturalearth)
+library(tidyterra)
+library(ggrepel)
+library(ggpubr)
+```
+
+File paths
+```{r}
+base_index_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/mean_index/"
+base_count_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/counts/"
+max_index_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs_max/mean_index/"
+max_count_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs_max/counts/"
+min_index_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs_min/mean_index/"
+min_count_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs_min/counts/"
+#state_shapes_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_shapes/"
+states_list_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_waters/"
+zeros_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/zeros/rasters/"
+figure_save_path <- "/home/shares/aquaculture/AOA_climate_change/figures/maps_for_each_taxa/seaweeds/"
+depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/"
+
+```
+
+
+Set up the zeros data for change calculations and the depth mask
+```{r}
+depth_mask <- terra::rast(paste0(depth_raster_path, "depth_200m.tif" ))
+
+zeros_data <- terra::rast(paste0(zeros_path, "federal_eez_zeros.tif"))
+
+zeros_data <- terra::mask(x = zeros_data,
+                          mask = depth_mask)
+
+```
+
+
+
+### Map Scales - make function
+```{r}
+scenario <- "126"
+time_period <- "2011_2030"
+max_or_min <- "max"
+index_or_count <- "index"
+
+comparing_results <- function(scenario, time_period, max_or_min, index_or_count) {
+  # retrieve the results paths based on inputs
+  if (index_or_count == "index" & max_or_min == "max") {
+    base_results_path <- base_index_results_path
+    new_results_path <- max_index_results_path
+  } else if (index_or_count == "count" & max_or_min == "max") {
+    base_results_path <- base_count_results_path
+    new_results_path <- max_count_results_path
+  } else if (index_or_count == "index" & max_or_min == "min") {
+    base_results_path <- base_index_results_path
+    new_results_path <- min_index_results_path
+  } else if (index_or_count == "count" & max_or_min == "min") {
+    base_results_path <- base_count_results_path
+    new_results_path <- min_count_results_path
+  }
+  
+  # make the file name using the inputs
+  # this should be the same name for both files
+  if (index_or_count == "index") {
+    results_file_name <- paste0("mean_index_performance_", scenario, "_", time_period, ".tif")
+  } else if (index_or_count == "count") {
+    results_file_name <- paste0("count_", scenario, "_", time_period, ".tif")
+  }
+  
+  # read in base and new results
+  base_results_raster <- terra::rast(x = paste0(base_results_path, results_file_name))
+  # mask to depth
+  base_results_raster <- terra::mask(x = base_results_raster,
+                                     mask = depth_mask)
+  
+  new_results_raster <- terra::rast(x = paste0(new_results_path, results_file_name))
+  # mask to depth
+  new_results_raster <- terra::mask(x = new_results_raster,
+                                    mask = depth_mask)
+  
+  # calculate the differences between the results and save
+  summary_difference <- summary(sum(new_results_raster, zeros_data) - sum(base_results_raster, zeros_data))
+  
+  return(summary_difference)
+}
+
+
+```
+
+## use function
+### max index for scenario 126 and all  times
+
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  max_index_126 <- comparing_results(scenario <- "126",
+                                     time_period <- times[i],
+                                     max_or_min <- "max",
+                                     index_or_count <- "index")
+  print(max_index_126)
+}
+
+```
+for all species min = -.07, max = 0.08
+
+for taxa min = -.17, max = 0.19
+
+
+### max index for scenario 245 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  max_index_245 <- comparing_results(scenario <- "245",
+                                     time_period <- times[i],
+                                     max_or_min <- "max",
+                                     index_or_count <- "index")
+  print(max_index_245)
+}
+
+```
+for all species min = -.07, max = 0.09
+
+for taxa min = -.18, max = 0.20
+
+### max index for scenario 585 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  max_index_585 <- comparing_results(scenario <- "585",
+                                     time_period <- times[i],
+                                     max_or_min <- "max",
+                                     index_or_count <- "index")
+  print(max_index_585)
+}
+
+```
+for all species min = -.08, max = 0.09
+
+for taxa min = -.17, max = 0.18
+
+### min index for scenario 126 and all  times
+
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  min_index_126 <- comparing_results(scenario <- "126",
+                                     time_period <- times[i],
+                                     max_or_min <- "min",
+                                     index_or_count <- "index")
+  print(min_index_126)
+}
+
+```
+for all species min = -.09, max = 0.06
+
+for taxa min = -.12, max = 0.13
+
+
+### min index for scenario 245 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  min_index_245 <- comparing_results(scenario <- "245",
+                                     time_period <- times[i],
+                                     max_or_min <- "min",
+                                     index_or_count <- "index")
+  print(min_index_245)
+}
+
+```
+for all species min = -.08, max = 0.07
+
+for taxa min = -.12, max = 0.14
+
+### min index for scenario 585 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  min_index_585 <- comparing_results(scenario <- "585",
+                                     time_period <- times[i],
+                                     max_or_min <- "min",
+                                     index_or_count <- "index")
+  print(min_index_585)
+}
+
+```
+for all species min = -.09, max = 0.07
+
+for taxa min = -.17, max = 0.14
+
+#### for index
+```{r}
+all_species_limits <- c(-.10, .10)
+
+taxa_limits <-c(-.20, .20)
+```
+
+### max count for scenario 126 and all  times
+
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  max_count_126 <- comparing_results(scenario <- "126",
+                                     time_period <- times[i],
+                                     max_or_min <- "max",
+                                     index_or_count <- "count")
+  print(max_count_126)
+}
+
+```
+for all species min = -3, max = 8
+
+for taxa min = -4, max = 6
+
+
+### max count for scenario 245 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  max_count_245 <- comparing_results(scenario <- "245",
+                                     time_period <- times[i],
+                                     max_or_min <- "max",
+                                     index_or_count <- "count")
+  print(max_count_245)
+}
+
+```
+for all species min = -4, max = 8
+
+for taxa min = -5, max = 6
+
+### max count for scenario 585 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  max_count_585 <- comparing_results(scenario <- "585",
+                                     time_period <- times[i],
+                                     max_or_min <- "max",
+                                     index_or_count <- "count")
+  print(max_count_585)
+}
+
+```
+for all species min = -3, max = 10
+
+for taxa min = -5, max = 6
+
+### min count for scenario 126 and all  times
+
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  min_count_126 <- comparing_results(scenario <- "126",
+                                     time_period <- times[i],
+                                     max_or_min <- "min",
+                                     index_or_count <- "count")
+  print(min_count_126)
+}
+
+```
+for all species min = -9, max = 4
+
+for taxa min = -5, max = 4
+
+
+### min count for scenario 245 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  min_count_245 <- comparing_results(scenario <- "245",
+                                     time_period <- times[i],
+                                     max_or_min <- "min",
+                                     index_or_count <- "count")
+  print(min_count_245)
+}
+
+```
+for all species min = -9, max = 3
+
+for taxa min = -6, max = 4
+
+### min count for scenario 585 and all times
+```{r}
+times <- c("2011_2030", "2031_2050", "2051_2070", "2071_2090")
+
+for (i in 1:length(times)) {
+  min_count_585 <- comparing_results(scenario <- "585",
+                                     time_period <- times[i],
+                                     max_or_min <- "min",
+                                     index_or_count <- "count")
+  print(min_count_585)
+}
+
+```
+for all species min = -9, max = 3
+
+for taxa min = -6, max = 4
+
+#### for count
+```{r}
+all_species_limits <- c(-10, 10)
+
+taxa_limits <-c(-6, 6)
+```
+

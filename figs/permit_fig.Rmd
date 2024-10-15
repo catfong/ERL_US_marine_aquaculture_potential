@@ -1,0 +1,258 @@
+---
+title: "try something new!"
+author: "Cat Fong"
+date: "2023-10-24"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+run figure_4 first!
+
+```{r set up the data}
+
+current_all<-read.csv(file = "/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_borders/data_frames/index/index_126_2011_2030.csv")
+colnames(current_all)<-c("X", "cell", "x", "y", "all_species_current", "all_fish_current", "all_mollusc_current", "all_seaweed_current", "state")
+current_all<-current_all[3:9]
+current_all<-pivot_longer(current_all, 3:6, names_to="taxa", values_to="index")
+current_all[is.na(current_all)] <- 0
+
+current_permit<-read.csv(file = "/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_permitted_species/permitted_species_index/data_frames/permitted_species_index_126_2051_2070.csv")
+colnames(current_permit)<-c("X", "cell", "x", "y", "permit_species_current", "permit_fish_current", "permit_mollusc_current", "permit_seaweed_current", "state")
+current_permit<-current_permit[3:9]
+current_permit<-pivot_longer(current_permit, 3:6, names_to="taxa", values_to="index")
+current_permit[is.na(current_permit)] <- 0
+
+mid_all<-read.csv(file = "/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_borders/data_frames/index/index_245_2051_2070.csv")
+colnames(mid_all)<-c("X", "cell", "x", "y", "all_species_mid", "all_fish_mid", "all_mollusc_mid", "all_seaweed_mid", "state")
+mid_all<-mid_all[3:9]
+mid_all<-pivot_longer(mid_all, 3:6, names_to="taxa", values_to="index")
+mid_all[is.na(mid_all)] <- 0
+
+mid_permit<-read.csv(file = "/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_permitted_species/permitted_species_index/data_frames/permitted_species_index_245_2051_2070.csv")
+colnames(mid_permit)<-c("X", "cell", "x", "y", "permit_species_mid", "permit_fish_mid", "permit_mollusc_mid", "permit_seaweed_mid", "state")
+mid_permit<-mid_permit[3:9]
+mid_permit<-pivot_longer(mid_permit, 3:6, names_to="taxa", values_to="index")
+mid_permit[is.na(mid_permit)] <- 0
+
+current_all_summary<-summarySE(current_all, measurevar="index", groupvars=c("taxa", "state"))
+current_permit_summary<-summarySE(current_permit, measurevar="index", groupvars=c("taxa", "state"))
+mid_all_summary<-summarySE(mid_all, measurevar="index", groupvars=c("taxa", "state"))
+mid_permit_summary<-summarySE(mid_permit, measurevar="index", groupvars=c("taxa", "state"))
+
+data<-rbind(current_all_summary, current_permit_summary, mid_all_summary, mid_permit_summary)
+
+data<-data %>%
+  separate(taxa, c("permit", "taxa", "time"), "_")
+
+levels_region_state<-c(
+  # Gulf
+  "Florida", "Alabama", "Mississippi", "Louisiana", "Texas",
+  # East Coast
+  "Georgia", "South Carolina", "North Carolina", "Virginia", "Maryland", "Delaware", "New Jersey", "New York", "Connecticut", "Rhode Island", "Massachusetts", "New Hampshire", "Maine", 
+  # West Coast
+  "Hawaii", "California", "Oregon", "Washington", 
+  "Alaska")
+
+levels_region<-c("Gulf", "Gulf","Gulf", "Gulf", "Gulf",
+                 "Atlantic", "Atlantic", "Atlantic", "Atlantic", "Atlantic","Atlantic","Atlantic","Atlantic","Atlantic","Atlantic","Atlantic","Atlantic","Atlantic","Pacific", "Pacific","Pacific","Pacific","Pacific")
+
+regions<-as.data.frame(cbind(state=levels_region_state, region=levels_region))
+
+data<-left_join(data, regions, by="state")
+data$region <- factor(data$region, levels = c("Pacific", "Atlantic", "Gulf"))
+data$state <- factor(data$state, levels = c(
+  # Gulf
+  "Florida", "Alabama", "Mississippi", "Louisiana", "Texas",
+  # East Coast
+  "Georgia", "South Carolina", "North Carolina", "Virginia", "Maryland", "Delaware", "New Jersey", "New York", "Connecticut", "Rhode Island", "Massachusetts", "New Hampshire", "Maine", 
+  # West Coast
+  "Hawaii", "California", "Oregon", "Washington", 
+  "Alaska"))
+
+```
+
+```{r plotting}
+
+species<-ggplot(data=subset(data, taxa=="species"), 
+       aes(x=state, y=index, color=permit)) +
+  geom_point(aes(shape = factor(time)), stat="identity", size=3, alpha=1)+
+  geom_line()+
+  scale_color_manual(values=c("#E69F00", "#56B4E9"))+
+scale_shape_manual(values=c(19,1))+
+  #geom_segment(aes(xend="current", yend="mid"), color="black")+
+  coord_flip()+ylim(0, .8)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  #ggtitle("2031-2050 change in # species")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+seaweeds<-ggplot(data=subset(data, taxa=="seaweed"), 
+       aes(x=state, y=index, color=permit)) +
+  geom_point(aes(shape = factor(time)), stat="identity", size=3, alpha=0.75)+
+  geom_line()+
+ scale_color_manual(values=c("#E69F00", "#56B4E9"))+
+scale_shape_manual(values=c(19,1))+
+  #geom_segment(aes(xend="current", yend="mid"), color="black")+
+  coord_flip()+ylim(0, .8)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  #ggtitle("2031-2050 change in # species")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+fish<-ggplot(data=subset(data, taxa=="fish"), 
+       aes(x=state, y=index, color=permit)) +
+  geom_point(aes(shape = factor(time)), stat="identity", size=3, alpha=0.75)+
+  geom_line()+
+ scale_color_manual(values=c("#E69F00", "#56B4E9"))+
+scale_shape_manual(values=c(19,1))+
+  #geom_segment(aes(xend="current", yend="mid"), color="black")+
+  coord_flip()+ylim(0, .8)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  #ggtitle("2031-2050 change in # species")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+mollusc<-ggplot(data=subset(data, taxa=="mollusc"), 
+       aes(x=state, y=index, color=permit)) +
+  geom_point(aes(shape = factor(time)), stat="identity", size=3, alpha=0.75)+
+  geom_line()+
+  scale_color_manual(values=c("#E69F00", "#56B4E9"))+
+scale_shape_manual(values=c(19,1))+
+  #geom_segment(aes(xend="current", yend="mid"), color="black")+
+  coord_flip()+ylim(0, .8)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  #ggtitle("2031-2050 change in # species")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+
+
+ggsave(plot = species,
+       filename = "all.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/permit/",
+       width = 4,
+       height = 5,
+       units = "in")
+ggsave(plot = seaweeds,
+       filename = "seaweeds.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/permit/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+ggsave(plot = mollusc,
+       filename = "mollusc.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/permit/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+ggsave(plot = fish,
+       filename = "fish.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/permit/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+```
+
+
+
+
+
+```{r data set up just the differences}
+
+current<-subset(data, time=="current")
+current<-current[c(1:4,6, 10)]
+colnames(current)<-c("permit", "taxa", "time", "state", "current_index", "region")
+mid<-subset(data, time=="mid")
+mid<-mid[c(1:4, 6)]
+colnames(mid)<-c("permit", "taxa", "time", "state", "mid_index")
+
+long_data<-left_join(current, mid, by=c("permit", "taxa","state"))
+long_data$dif<-long_data$mid_index-long_data$current_index
+
+
+ggplot(data=long_data, 
+       aes(x=state, y=dif, color=taxa)) +
+  geom_point(aes(shape = factor(permit)),  stat="identity", size=3, alpha=0.5)+
+  geom_line()+
+  scale_color_manual(values=c("#0072B2", "#CC79A7", "#009E73", "#E69F00"))+
+  #geom_segment(aes(xend="current", yend="mid"), color="black")+
+  coord_flip()+#ylim(-3, 8)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  #ggtitle("2031-2050 change in # species")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+```

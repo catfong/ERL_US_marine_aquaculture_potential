@@ -1,0 +1,199 @@
+---
+title: "Stoplight"
+author: "Cat Fong"
+date: "2023-11-01"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r read and format data}
+
+data<-read.csv("/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_borders/combined_df_all_taxa_scenarios_and_periods.csv")
+
+head(data)
+
+data$ssp1_change_mid_all<-data$all_species_index_126_2051_2070-data$all_species_index_126_2011_2030
+data$ssp1_change_mid_seaweed<-data$seaweed_index_126_2051_2070-data$seaweed_index_126_2011_2030
+data$ssp1_change_mid_fish<-data$fish_index_126_2051_2070-data$fish_index_126_2011_2030
+data$ssp1_change_mid_mollusc<-data$mollusc_index_126_2051_2070-data$mollusc_index_126_2011_2030
+data$ssp2_change_mid_all<-data$all_species_index_245_2051_2070-data$all_species_index_126_2011_2030
+data$ssp2_change_mid_seaweed<-data$seaweed_index_245_2051_2070-data$seaweed_index_126_2011_2030
+data$ssp2_change_mid_fish<-data$fish_index_245_2051_2070-data$fish_index_126_2011_2030
+data$ssp2_change_mid_mollusc<-data$mollusc_index_245_2051_2070-data$mollusc_index_126_2011_2030
+data$ssp5_change_mid_all<-data$all_species_index_585_2051_2070-data$all_species_index_126_2011_2030
+data$ssp5_change_mid_seaweed<-data$seaweed_index_585_2051_2070-data$seaweed_index_126_2011_2030
+data$ssp5_change_mid_fish<-data$fish_index_585_2051_2070-data$fish_index_126_2011_2030
+data$ssp5_change_mid_mollusc<-data$mollusc_index_585_2051_2070-data$mollusc_index_126_2011_2030
+data$ssp1_change_far_all<-data$all_species_index_126_2071_2090-data$all_species_index_126_2011_2030
+data$ssp1_change_far_seaweed<-data$seaweed_index_126_2071_2090-data$seaweed_index_126_2011_2030
+data$ssp1_change_far_fish<-data$fish_index_126_2071_2090-data$fish_index_126_2011_2030
+data$ssp1_change_far_mollusc<-data$mollusc_index_126_2071_2090-data$mollusc_index_126_2011_2030
+data$ssp2_change_far_all<-data$all_species_index_245_2071_2090-data$all_species_index_126_2011_2030
+data$ssp2_change_far_seaweed<-data$seaweed_index_245_2071_2090-data$seaweed_index_126_2011_2030
+data$ssp2_change_far_fish<-data$fish_index_245_2071_2090-data$fish_index_126_2011_2030
+data$ssp2_change_far_mollusc<-data$mollusc_index_245_2071_2090-data$mollusc_index_126_2011_2030
+data$ssp5_change_far_all<-data$all_species_index_585_2071_2090-data$all_species_index_126_2011_2030
+data$ssp5_change_far_seaweed<-data$seaweed_index_585_2071_2090-data$seaweed_index_126_2011_2030
+data$ssp5_change_far_fish<-data$fish_index_585_2071_2090-data$fish_index_126_2011_2030
+data$ssp5_change_far_mollusc<-data$mollusc_index_585_2071_2090-data$mollusc_index_126_2011_2030
+
+dat<-data[45:68]
+
+dat<-cbind(state=data$state, dat)
+dat<-pivot_longer(dat, 2:25, names_to="scenario", values_to="change")
+dat<-separate(data = dat, col = scenario, into = c("scenario", "metric", "time", "taxa"), sep = "_")
+
+data<-summarySE(dat, measurevar = "change", groupvars=c("state", "scenario", "time", "taxa"))
+head(data)
+
+data<-left_join(data, regions, by="state")
+data$region <- factor(data$region, levels = c("Pacific", "Atlantic", "Gulf"))
+data$state <- factor(data$state, levels = c(
+  # Gulf
+  "Florida", "Alabama", "Mississippi", "Louisiana", "Texas",
+  # East Coast
+  "Georgia", "South Carolina", "North Carolina", "Virginia", "Maryland", "Delaware", "New Jersey", "New York", "Connecticut", "Rhode Island", "Massachusetts", "New Hampshire", "Maine", 
+  # West Coast
+  "Hawaii", "California", "Oregon", "Washington", 
+  "Alaska"))
+
+
+```
+```{r make some plots!}
+
+all<-ggplot(data=subset(data, time=="mid" &taxa=="all"), aes(x=state, y=change, color=scenario)) +
+  geom_point(stat="identity", size=3, alpha=0.75)+
+  scale_color_manual(values=c("#009E73", "#F0E442", "#D55E00"))+
+  #geom_segment(aes(xend=state, yend=0), color="black")+
+    geom_hline(yintercept=0,linetype=2)+
+coord_flip()+ylim(-.17, .11)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  ggtitle("All taxa PI")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+seaweeds<-ggplot(data=subset(data, time=="mid" &taxa=="seaweed"), aes(x=state, y=change, color=scenario)) +
+  geom_point(stat="identity", size=3, alpha=0.75)+
+  scale_color_manual(values=c("#009E73", "#F0E442", "#D55E00"))+
+  #geom_segment(aes(xend=state, yend=0), color="black")+
+    geom_hline(yintercept=0,linetype=2)+
+coord_flip()+ylim(-.17, .11)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  ggtitle("Seaweed PI")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+mollusc<-ggplot(data=subset(data, time=="mid" &taxa=="mollusc"), aes(x=state, y=change, color=scenario)) +
+  geom_point(stat="identity", size=3, alpha=0.75)+
+  scale_color_manual(values=c("#009E73", "#F0E442", "#D55E00"))+
+  #geom_segment(aes(xend=state, yend=0), color="black")+
+    geom_hline(yintercept=0,linetype=2)+
+coord_flip()+ylim(-.17, .11)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  ggtitle("Mollusc PI")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+fish<-ggplot(data=subset(data, time=="mid" &taxa=="fish"), aes(x=state, y=change, color=scenario)) +
+  geom_point(stat="identity", size=3, alpha=0.75)+
+  scale_color_manual(values=c("#009E73", "#F0E442", "#D55E00"))+
+  #geom_segment(aes(xend=state, yend=0), color="black")+
+    geom_hline(yintercept=0,linetype=2)+
+coord_flip()+ylim(-.17, .11)+
+  theme_bw()+theme(axis.title.y = element_blank())+
+  ggtitle("Finfish PI")+
+  theme(plot.title = element_text(size = 12))+
+  facet_grid(
+    scales = "free_y",
+    row = vars(region),
+    #col = 1,
+    shrink = TRUE,
+    space = "free_y",
+    switch = "both")+
+  # Place facet labels outside x axis labels.
+  theme(strip.placement = "outside",                
+        # Make facet label background white.
+        strip.background = element_rect(fill = NA,
+                                        color = NA),
+        strip.text = element_text(face = "bold"),
+        axis.title.y=element_blank())
+
+ggarrange(all, seaweeds, mollusc, fish, ncol=4, nrow=1)
+
+```
+
+```{r save}
+ggsave(plot = all,
+       filename = "all_near.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/stoplight/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+
+ggsave(plot = seaweeds,
+       filename = "seaweed_near.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/stoplight/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+ggsave(plot = mollusc,
+       filename = "mollusc_near.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/stoplight/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+ggsave(plot = fish,
+       filename = "fish_near.pdf",
+       device = "pdf",
+       path = "/home/shares/aquaculture/AOA_climate_change/figures/stoplight/",
+       width = 4,
+       height = 5,
+       units = "in")
+
+```

@@ -1,0 +1,281 @@
+---
+format: html
+editor: visual
+title: "NOAA_arag"
+---
+
+## Data Source
+
+**Reference**: Jiang, L.-Q., Dunne, J., Carter, B. R., Tjiputra, J. F., Terhaar, J., Sharp, J. D., Olsen, A., Alin, S., Bakker, D. C. E., Feely, R. A., Gattuso, J.-P., Hogan, P., Ilyina, T., Lange, N., Lauvset, S. K., Lewis, E. R., Lovato, T., Palmieri, J., Santana-Falcón, Y., Schwinger, J., Séférian, R., Strand, G., Swart, N., Tanhua, T., Tsujino, H., Wanninkhof, R., Watanabe, M., Yamamoto, A., and Ziehn, T. (2023). Global surface ocean acidification indicators from 1750 to 2100. Journal of Advances in Modeling Earth Systems, 15, e2022MS003563. https://doi.org/10.1029/2022MS003563.
+
+**Downloaded**:4/20/2023
+
+**Description**: This data package contains a hybrid surface OA data product that is produced based on three recent observational data products: (a) the Surface Ocean CO2 Atlas (SOCAT, version 2022), (b) the Global Ocean Data Analysis Product version 2 (GLODAPv2, version 2022), and (c) the Coastal Ocean Data Analysis Product in North America (CODAP-NA, version 2021), and 14 Earth System Models from the sixth phase of the Coupled Model Intercomparison Project (CMIP6). The trajectories of ten OA indicators, including fugacity of carbon dioxide, pH on Total Scale, total hydrogen ion content, free hydrogen ion content, carbonate ion content, aragonite saturation state, calcite saturation state, Revelle Factor, total dissolved inorganic carbon content, and total alkalinity content are provided under preindustrial conditions, historical conditions, and future Shared Socioeconomic Pathways: SSP1-19, SSP1-26, SSP2-45, SSP3-70, and SSP5-85 from 1750 to 2100 on a global surface ocean grid. These OA trajectories are improved relative to previous OA data products with respect to data quantity, spatial and temporal coverage, diversity of the underlying data and model simulations, and the provided SSPs over the 21st century.
+
+We are interested in the Aragonite Saturation State, $\Omega_{arg}$, layer. For the purposes of the study we want the aragonite data for the warming scenarios SSP1-19, SSP2-45, and SSP5-85.
+
+From the methods section of the paper: "To minimize the influences of modeled interannual variability in any particular year, all 10 years of model results for each decade were averaged to calculate a single value for that decade. For example, SST, SSS, DIC, and TA at each grid point of the global surface ocean in the decade of 2010 were calculated as the mean of all values at that location from January 2005 to December 2014."
+
+**Native data resolution**: 1 \[20.5:1:379.5\] degree longitude x 1 \[-89.5:1:89.75\] degree latitude grid in the global surface ocean
+
+**Time range**: historical 1750 and average decadal from 1840-2010 (n = 18 layers); average decadal future scenarios 2010-2100 (n=9 layers)
+
+**Format**: NetCDF
+
+This script takes the raw netCDF data and does the following:
+
+a.  Reprojects to our CRS
+b.  Masks data within boundary of sst and chl layers (USA EEZ)
+c.  Calculates the average aragonite saturation for 20 year timespans from 2010-2090.
+d.  Write and save rasters to folder on Aurora
+
+## Setup
+
+```{r}
+library(tidyverse)
+library(terra)
+```
+
+```{r}
+arag_raw <- "/home/shares/aquaculture/AOA_climate_change/raw_data/NOAA_global_ocean_acidification_1750_2100/nc/median/"
+save_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/aragonite/"
+
+project_raster <- terra::rast("/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/monthly_sst_126_2011_2030.tif")
+mask <- terra::rast("/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/monthly_sst_126_2011_2030.tif")
+project_crs <- terra::crs(project_raster) # make a crs template for the data to match
+project_extent <- terra::ext(project_raster) # make an extent for the project to match data
+```
+
+## Clean, Reproject, Mask Data into Extent and Gapfill Resolution to the Coast
+
+Function to do the above
+
+```{r}
+raster_gapfill <- function(arag_raw_path, scenario, project_raster) {
+  arag_raw <- paste0(arag_raw, "Aragonite_median_ssp", scenario, ".nc")         # path to read in aragonite data based on filepath and warming scenario
+  project_crs <- terra::crs(project_raster)                                     # obtain crs from project_raster - project raster should have the base attributes of your project (extent, crs, etc.)
+  project_extent <- terra::ext(project_raster)                                  # make an extent for the project to match data
+  
+  arag_raster <- terra::rast(x = arag_raw,                                      # read in netCDF raster data
+                           opts = "NETCDF")
+  
+  terra::ext(arag_raster) <- c(0, 360, -90, 90)                                 # make the raster have an extent
+  
+  arag_raster <- terra::rotate(arag_raster)                                     # Rotate a SpatRaster that has longitude coordinates from 0 to 360, to standard coordinates between -180 and 180 degrees
+  arag_raster <-terra::shift(arag_raster, dx=20)                                # Shift a SpatRaster, SpatVector or SpatExtent to another location, why do this?
+
+
+  terra::crs(arag_raster) <- project_crs                                        # reproject into project CRS
+
+  arag_raster <- terra::crop(x = arag_raster,                                   # crop data to the extent of other rasters which is the USA
+                             y = project_extent)                                # crop to area of interest
+  
+  terra::ext(arag_raster) <- project_extent                                     # make arag_raster have the exact same extent as the project_raster
+
+  arag_resample <- terra::resample(x = arag_raster,                             # resample aragonite data to have the same resolution as the project_raster
+                                 y = project_raster[[1]],                       # resample to match the resolution of this raster
+                                 method = "bilinear")                           # use the bilinear method
+  
+  gapfill_raster <- arag_resample      
+  print("Gapfilling resampled raster to fit to the coasts")
+  
+  for (i in 1:85) {
+    gapfill_raster <- terra::focal(x = gapfill_raster,                          # take the resampled raster and calculate focal values to get coastal values
+                                   w = 5,                                       # use matrix weight of 5 for focal calculation
+                                   fun = "mean",                                # calculate the mean of aragonite values in that matrix
+                                   na.policy = "only",                          # only apply this to NA values
+                                   expand = FALSE,                              # false otherwise will change values other than NA
+                                   na.rm = TRUE)                                # remove NA from mean calculations
+  }
+  
+  arag_coast <- terra::mask(x = gapfill_raster,                                 # mask gap filled raster to our area of interest
+                            mask = project_raster[[1]])                              # just use this one layer for the mask
+  return(arag_coast)
+}
+```
+
+Test to see if function works:
+
+```{r}
+arag_126 <- raster_gapfill(arag_raw_path = arag_raw,
+                           scenario = 126,
+                           project_raster = project_raster)
+
+plot(arag_126$aragonite_1)
+```
+
+## Calculate the Average Aragonite Saturation for 20 year Timespans (2010-2090)
+
+```{r}
+
+arag_raster_maker <- function(gapfilled_arag) {
+  arag_raster <- gapfilled_arag[[1:8]]                                          # leave out the last timespan aragonite layer which is 2100
+  
+  
+  ## Make the mean aragonite layers
+  mean_arag <- terra::tapp(x = arag_raster,
+                           index = c(1,1,2,2,3,3,4,4),                          # indices are recycled such that every 2 layer is a group (10 year periods)
+                           fun = "mean")                                        # calculate the mean of each period
+  names(mean_arag[[1]]) <- "mean_2011_2030"
+  names(mean_arag[[2]]) <- "mean_2031_2050"
+  names(mean_arag[[3]]) <- "mean_2051_2070"
+  names(mean_arag[[4]]) <- "mean_2071_2090"
+  
+  # Make the sd aragonite layers
+  sd_arag <- terra::tapp(x = arag_raster,
+                         index = c(1,1,2,2,3,3,4,4),                            # indices are recycled such that every 2 layer is a group (10 year periods)
+                         fun = "sd")                                            # calculate the sd of each period
+  names(sd_arag[[1]]) <- "sd_2011_2030"
+  names(sd_arag[[2]]) <- "sd_2031_2050"
+  names(sd_arag[[3]]) <- "sd_2051_2070"
+  names(sd_arag[[4]]) <- "sd_2071_2090"
+  
+  # Make the absolute min layers
+  min_arag <- terra::tapp(x = arag_raster,
+                          index = c(1,1,2,2,3,3,4,4),                           # indices are recycled such that every 2 layer is a group (10 year periods)
+                          fun = "min")                                          # calculate the min of each period
+  names(min_arag[[1]]) <- "min_2011_2030"
+  names(min_arag[[2]]) <- "min_2031_2050"
+  names(min_arag[[3]]) <- "min_2051_2070"
+  names(min_arag[[4]]) <- "min_2071_2090"
+  
+  # Make the absolute max layers
+  max_arag <- terra::tapp(x = arag_raster,
+                          index = c(1,1,2,2,3,3,4,4),                           # indices are recycled such that every 2 layer is a group (10 year periods)
+                          fun = "max")                                          # calculate the max of each period
+  names(max_arag[[1]]) <- "max_2011_2030"
+  names(max_arag[[2]]) <- "max_2031_2050"
+  names(max_arag[[3]]) <- "max_2051_2070"
+  names(max_arag[[4]]) <- "max_2071_2090"
+  
+  ## Bind all the raster layers together
+
+  scenario_raster <- c(mean_arag,
+                       sd_arag,
+                       min_arag,
+                       max_arag)
+  return(scenario_raster)
+}
+
+
+```
+
+## Write and save files to Aurora
+
+```{r}
+arag_raw_path <- "/home/shares/aquaculture/AOA_climate_change/raw_data/NOAA_global_ocean_acidification_1750_2100/nc/median/"
+project_raster <- terra::rast("/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/monthly_sst_126_2011_2030.tif")
+save_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/aragonite/"
+overwrite <- TRUE
+
+## Warming scenario 126
+scenario <- 126
+
+arag_126 <- raster_gapfill(arag_raw_path = arag_raw,
+                           scenario = 126,
+                           project_raster = project_raster)
+
+raster_stack <- arag_raster_maker(gapfilled_arag = arag_126)
+
+writeRaster(x = raster_stack,
+            filename = paste0(save_path, "arag_", scenario, ".tif"),
+            gdal="COMPRESS=NONE",
+            overwrite = overwrite)
+
+## Warming scenario 245
+scenario <- 245
+
+arag_245 <- raster_gapfill(arag_raw_path = arag_raw,
+                           scenario = 245,
+                           project_raster = project_raster)
+
+raster_stack <- arag_raster_maker(gapfilled_arag = arag_245)
+
+writeRaster(x = raster_stack,
+            filename = paste0(save_path, "arag_", scenario, ".tif"),
+            gdal="COMPRESS=NONE",
+            overwrite = overwrite)
+
+## Warming scenario 585
+scenario <- 585
+
+arag_585 <- raster_gapfill(arag_raw_path = arag_raw,
+                           scenario = 585,
+                           project_raster = project_raster)
+
+raster_stack <- arag_raster_maker(gapfilled_arag = arag_585)
+
+writeRaster(x = raster_stack,
+            filename = paste0(save_path, "arag_", scenario, ".tif"),
+            gdal="COMPRESS=NONE",
+            overwrite = overwrite)
+```
+
+## Read in saved data and cap for viable saturation states
+
+```{r}
+arag_126 <- terra::rast(paste0(save_path, "arag_126.tif"))
+
+test_rast <- terra::clamp(x = arag_126$min_2051_2070,
+                          lower = 1.0,
+                          values = FALSE)
+
+na_original <- terra::freq(arag_126$min_2051_2070,
+                           value = NA)[1,3]
+ncell_original <- terra::ncell(arag_126$min_2051_2070)
+
+not_na_original <- ncell_original - na_original
+
+na_test <- terra::freq(test_rast$min_2051_2070,
+                           value = NA)[1,3]
+ncell_test <- terra::ncell(test_rast$min_2051_2070)
+
+not_na_test <- ncell_test - na_test
+
+not_na_test/not_na_original
+
+
+
+```
+
+Filter max aragonite layers to include those that have a time period minimum value greater than 1
+
+```{r}
+arag_layers_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/aragonite/"
+save_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/aragonite/adjusted_filters/"
+overwrite <- TRUE
+
+# list the aragonite files
+arag_files <- list.files(arag_layers_path, pattern = "arag*")
+# save the number of files
+number_files <- n_distinct(arag_files)
+
+arag_variable <- "min"
+
+# make a loop to make our new filter layers 
+for (i in 1:number_files){
+  # get the scenario name to save the file
+  scenario <- str_sub(string = arag_files[i],
+                    start = 6,
+                    end = 8)
+  # load in our raster file
+  arag_scenario_raster <- terra::rast(paste0(arag_layers_path, arag_files[i]))
+  
+  # subset arag_scenario_raster our arag_variable
+  var_lyrs <- names(arag_scenario_raster)[stringr::str_starts(string = names(arag_scenario_raster),            
+                                                              pattern = arag_variable)]
+  arag_scenario_raster <- subset(arag_scenario_raster, var_lyrs)
+  
+  # use ifel to make all values  > 1 binary and all else NA
+  arag_scenario_raster <- terra::ifel(test = arag_scenario_raster > 1,
+                                      yes = 1,
+                                      no = NA)
+  
+  # save the scenario raster into our folder
+  terra::writeRaster(x = arag_scenario_raster,
+                     filename = paste0(save_path, "aragonite_filter_", scenario, ".tif"),
+                     gdal="COMPRESS=NONE",
+                     overwrite = overwrite)
+}
+
+```

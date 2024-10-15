@@ -1,0 +1,70 @@
+---
+title: "Big Performance Index Dataframe"
+output: html_document
+date: "2023-10-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The goal of this script is to make a dataframe that contains all of the performance index scores for each raster cell that meets depth and state waters constraints. There will be a column for each time period, warming scenario, and taxa category.
+
+## Setup
+```{r}
+library(tidyverse)
+library(terra)
+```
+
+Paths
+```{r}
+zeros_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/zeros/data_frames/"
+depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/"
+performance_index_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_borders/data_frames/index/"
+```
+
+
+## Zeros data
+```{r}
+zeros_raw <- read.csv(paste0(zeros_path, "state_water_zeros_w_depth_constraint.csv"))
+```
+
+## PI Data Frames
+```{r}
+current_df <- read.csv(paste0(performance_index_path, "index_126_2011_2030.csv")) %>% 
+  # remove weird X column
+  select(-X) %>% 
+  # relocate state column to after x and y
+  relocate(state, .after = y)
+
+other_periods_and_scenarios <- list.files(performance_index_path,
+                                          pattern = "126|245|585") 
+
+other_periods_and_scenarios <- other_periods_and_scenarios[!grepl("2011_2030", other_periods_and_scenarios)]
+
+other_periods_and_scenarios
+
+combined_df <- current_df
+
+
+for (i in 1:n_distinct(other_periods_and_scenarios)){
+  
+  next_time_and_scenario <- read.csv(paste0(performance_index_path, other_periods_and_scenarios[i])) %>% 
+  # remove weird X column
+  select(-X)
+  
+  print(nrow(next_time_and_scenario))
+  
+  combined_df <- left_join(x = combined_df,
+                           y = next_time_and_scenario)
+}
+
+combined_df[is.na(combined_df)] <- 0
+
+write_csv(x = combined_df,
+          file = "/home/shares/aquaculture/AOA_climate_change/performance_calcs/state_borders/combined_df_all_taxa_scenarios_and_periods.csv")
+```
+
+
+
+

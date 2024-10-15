@@ -1,0 +1,80 @@
+---
+title: "state_waters"
+output: html_document
+date: "2023-07-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE)
+```
+
+## Setup
+
+This markdown takes the state marine water boundary shapefile made in the linked script and matches it to be in our project's crs and extent. The script that made the state shapefiles is located here: https://github.com/OHI-Science/aquaculture_climatechange_usa/blob/main/prep_data/marine/spatial/prep_spatial.Rmd
+
+
+Packages:
+
+```{r}
+library(tidyverse)
+library(terra)
+```
+
+File paths:
+
+```{r}
+state_shapes_path <- "/home/shares/aquaculture/aquaculture_climatechange_usa/prep_data/marine/spatial/output/"
+raster_template_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/"
+save_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_waters/"
+```
+
+## Read in .shp File and Convert to our CRS and Extent
+
+```{r}
+# read in state waters shape file
+state_shapes <- terra::vect(x = paste0(state_shapes_path, "US_state_waters_regions_final.shp"))
+
+# read in raster file to use as template
+raster_template <- terra::rast(x = paste0(raster_template_path, "sst_126_2011_2030.tif"))
+
+project_crs <- terra::crs(raster_template)
+project_extent <- terra::ext(raster_template)
+
+# change crs to project_crs
+terra::crs(state_shapes) <- project_crs
+
+#crop to project_extent
+state_shapes <- terra::crop(state_shapes, project_extent)
+
+
+```
+
+Save the shapefile
+```{r}
+terra::writeVector(x = state_shapes,
+                   filename = paste0(save_path, "state_waters.shp"),
+                   overwrite = TRUE)
+```
+
+
+Examples of using the regions and masking
+```{r}
+terra::plot(raster_template$mean_2011_2030)
+terra::lines(state_shapes)
+
+west_crop <- state_shapes[state_shapes$region == "West Coast"]
+
+west_rast <- terra::mask(x = raster_template$mean_2011_2030,
+                         mask = west_crop)
+terra::plot(west_rast)
+
+
+california_mask <- state_shapes[state_shapes$state == "California"]
+california_rast <- terra::mask(x = raster_template$mean_2011_2030,
+                         mask = california_mask)
+terra::plot(california_rast)
+
+```
+
+

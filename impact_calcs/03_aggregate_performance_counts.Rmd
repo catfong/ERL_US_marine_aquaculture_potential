@@ -1,0 +1,82 @@
+---
+title: "performance_counts"
+output: html_document
+date: "2023-07-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Packages
+```{r}
+library(tidyverse)
+library(terra)
+```
+
+File Paths
+```{r}
+performance_rasters_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/all_species_index/"
+save_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/counts/"
+```
+
+
+Make a test version of what we are trying to do
+```{r}
+source(here::here("impact_calcs/custom_functions/aggregate_count_performance_maker.R"))
+
+```
+
+Apply function to all scenarios and time periods
+```{r}
+overwrite <- TRUE
+performance_files <- list.files(path = performance_rasters_path,
+                               pattern = "all_species_*")
+number_files <- n_distinct(performance_files)
+
+for (i in 1:number_files){
+  scenario <- str_sub(string = performance_files[i],
+                    start = 13,
+                    end = 25)
+  scenario_raster <- terra::rast(paste0(performance_rasters_path, performance_files[i]))
+  
+  scenario_raster <- count_performance_maker(species_raster = scenario_raster,
+                                             GPI_filter = 0.5)
+  
+  terra::writeRaster(x = scenario_raster,
+                     filename = paste0(save_path, "count_", scenario, ".tif"),
+                     gdal="COMPRESS=NONE",
+                     overwrite = overwrite)
+  print(paste("Done with", performance_files[i]))
+}
+
+
+```
+
+did the above loop work as intended?
+```{r}
+count_126_2011_2030 <- terra::rast(paste0(save_path,"count_126_2011_2030.tif"))
+
+count_245_2011_2030 <- terra::rast(paste0(save_path,"count_245_2011_2030.tif")) 
+
+count_585_2011_2030 <- terra::rast(paste0(save_path,"count_585_2011_2030.tif")) 
+
+terra::plot(count_126_2011_2030)
+terra::plot(count_245_2011_2030)
+terra::plot(count_585_2011_2030)
+```
+
+```{r}
+count_126_2011_2030 <- terra::rast(paste0(save_path,"count_126_2011_2030.tif"))
+count_245_2071_2090 <- terra::rast(paste0(save_path,"count_245_2071_2090.tif")) 
+count_585_2071_2090 <- terra::rast(paste0(save_path,"count_585_2071_2090.tif")) 
+
+terra::plot(count_126_2011_2030)
+terra::plot(count_245_2071_2090)
+terra::plot(count_585_2071_2090)
+```
+
+
+
+
+

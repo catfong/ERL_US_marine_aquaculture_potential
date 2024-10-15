@@ -1,0 +1,243 @@
+---
+title: "species_data_and_figs_for_review"
+output: html_document
+date: "2024-07-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The goal of this script is to explore species specific results as requested by the reviewers of the original draft.
+
+## Setup
+
+Packages
+```{r}
+library(tidyverse)
+library(terra)
+library(ggplot2)
+library(ggmap)
+library(cowplot)
+library(rnaturalearth)
+library(tidyterra)
+library(ggrepel)
+library(ggpubr)
+```
+
+File paths
+```{r}
+species_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/all_species_index/"
+
+temp_results_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/"
+
+save_path <- "/home/shares/aquaculture/AOA_climate_change/figures/species_plots_for_review/"
+
+```
+
+```{r}
+test_raster <- rast(file.path(species_results_path, "all_species_245_2011_2030.tif"))
+
+test_df <- terra::as.data.frame(x = test_raster,
+                                xy = TRUE,
+                                cells = TRUE,
+                                na.rm = NA) %>% 
+  pivot_longer(cols = 4:34,
+               names_to = "species",
+               values_to = str_sub(string = sources(test_raster), 
+                                   start = -17,
+                                   end = -5)) %>%
+  mutate(species = str_remove(species,
+                              pattern = "mean"),
+         taxa = case_when(
+           str_detect(species, "fish") ~ "fish",
+           str_detect(species, "mollusc") ~ "mollusc",
+           str_detect(species, "seaweed") ~ "seaweed",
+           TRUE ~ "NA"
+           ),
+         species = str_remove(string = species,
+                              patter = "__.*"))
+
+# str_sub(string = paste0(all_species_state_borders_path, all_species_state_borders_list[j]), 
+#                                  start = -17, 
+#                                  end = -5)
+```
+
+make a look that does all of this for all of the species and all time periods
+```{r}
+# list all result raster files
+raster_files <- list.files(species_results_path)
+
+# remove current results rasters
+raster_files <- raster_files[!grepl("2011_2030", raster_files)]
+
+# read in raster of current time period
+current_raster <- rast(file.path(species_results_path, "all_species_126_2011_2030.tif"))
+
+# make base df for others to be joined to
+current_df <- terra::as.data.frame(x = current_raster,
+                                   xy = TRUE,
+                                   cells = TRUE,
+                                   # this removes rows where NAs are always present (out of stud area)
+                                   na.rm = NA) %>% 
+  pivot_longer(cols = 4:34,
+               names_to = "species",
+               # get time period and scenario for name of values
+               values_to = str_sub(string = sources(current_raster), 
+                                   start = -17,
+                                   end = -5)) %>%
+  # remove mean from species column
+  mutate(species = str_remove(species,
+                              pattern = "mean"),
+         # make taxa column in case it is needed
+         taxa = case_when(
+           str_detect(species, "fish") ~ "fish",
+           str_detect(species, "mollusc") ~ "mollusc",
+           str_detect(species, "seaweed") ~ "seaweed",
+           TRUE ~ "NA"
+         ),
+         # remove taxa names after species name from species column
+         species = str_remove(string = species,
+                              patter = "__.*")) %>% 
+  dplyr::relocate(taxa, .after = species)
+
+# make the df that will house all the results
+# this will let us join the other results easily
+all_times_scenarios_df <- current_df
+
+for (i in 1:n_distinct(raster_files)) {
+  # read in the next raster file from raster_files
+  next_time_scenario_rast <- rast(file.path(species_results_path, raster_files[i]))
+  
+  # make the raster a df and process it to join
+  next_time_scenario_df <- terra::as.data.frame(x = next_time_scenario_rast,
+                                                xy = TRUE,
+                                                cells = TRUE,
+                                                # this removes rows where NAs are always present (out of stud area)
+                                                na.rm = NA) %>% 
+    pivot_longer(cols = 4:34,
+                 names_to = "species",
+                 # get time period and scenario for name of values
+                 values_to = str_sub(string = sources(next_time_scenario_rast), 
+                                     start = -17,
+                                     end = -5)) %>%
+    # remove mean from species column
+    mutate(species = str_remove(species,
+                                pattern = "mean"),
+           # make taxa column in case it is needed
+           taxa = case_when(
+             str_detect(species, "fish") ~ "fish",
+             str_detect(species, "mollusc") ~ "mollusc",
+             str_detect(species, "seaweed") ~ "seaweed",
+             TRUE ~ "NA"
+           ),
+           # remove taxa names after species name from species column
+           species = str_remove(string = species,
+                                patter = "__.*"))
+  
+  # join with other results
+  all_times_scenarios_df <- left_join(all_times_scenarios_df,
+                                      next_time_scenario_df,
+                                      by = c("cell", "x", "y", "species", "taxa"))
+  
+  print(paste("Done with ", i))
+  
+}
+
+# make the NAs zeros
+all_times_scenarios_df[is.na(all_times_scenarios_df)] <- 0
+```
+
+Now calculate the differences in PI over time
+```{r}
+differences_species_pi <- all_times_scenarios_df %>% 
+  rename(pi_current = "126_2011_2030") %>% 
+  # across columns 7-15 calculate the difference between current PI and each scenario
+  mutate(across(.cols = 7:15,
+                .fns = ~ .x - pi_current)) %>% 
+  pivot_longer(cols = 7:15,
+               names_to = "scenario_time_period",
+               values_to = "difference_in_pi")
+```
+
+
+## Temp
+Now we need to make similar df for temperature
+
+now make a loop
+```{r}
+current_temp_raster <- rast(file.path(temp_results_path, "sst_126_2011_2030.tif"))
+
+current_temp_df <- terra::as.data.frame(x = current_temp_raster,
+                                xy = TRUE,
+                                cells = TRUE,
+                                na.rm = NA) %>% 
+  # only keep columns 1:4 so we can keep the mean_sst
+  select(1, 2, 3, "temp" = 4) %>% 
+  rename("126_2011_2030" = "temp")
+
+temp_files <- list.files(temp_results_path,
+                         # the carrot denotes to only get files that start with sst
+                         pattern = "^sst")
+
+# remove current results rasters
+temp_files <- temp_files[!grepl("2011_2030", temp_files)]
+
+#make an all_temps_df
+all_temps_df <- current_temp_df
+
+for (i in 1:n_distinct(raster_files)) {
+  # read in the next raster file from raster_files
+  next_time_scenario_rast <- rast(file.path(temp_results_path, temp_files[i]))
+  
+  rename_characters <- str_sub(string = sources(next_time_scenario_rast), 
+                               start = -17,
+                               end = -5)
+  
+  # make the raster a df and process it to join
+  next_time_scenario_df <- terra::as.data.frame(x = next_time_scenario_rast,
+                                                xy = TRUE,
+                                                cells = TRUE,
+                                                # this removes rows where NAs are always present (out of stud area)
+                                                na.rm = NA) %>%
+    # only keep columns 1:4 so we can keep the mean_sst
+    select(1, 2, 3, "temp" = 4)  
+  
+  # Rename the temp column
+  names(next_time_scenario_df)[names(next_time_scenario_df) == "temp"] <- rename_characters
+  
+    # join with other results
+  all_temps_df <- left_join(all_temps_df,
+                            next_time_scenario_df,
+                            by = c("cell", "x", "y"))
+  
+  print(paste("Done with ", i))
+  
+}
+
+```
+
+Now calculate the differences in temp over time and scenario
+```{r}
+differences_temps <- all_temps_df %>% 
+  rename(temp_current = "126_2011_2030") %>% 
+  # across columns 7-15 calculate the difference between current PI and each scenario
+  mutate(across(.cols = 5:13,
+                .fns = ~ .x - temp_current)) %>% 
+  pivot_longer(cols = 5:13,
+               names_to = "scenario_time_period",
+               values_to = "difference_in_temp")
+```
+
+## Join PI and temp
+```{r}
+pi_and_temp_change <- left_join(x = differences_species_pi,
+                                y = differences_temps,
+                                by = c("cell", "x", "y", "scenario_time_period"))
+
+# save the file
+write_csv(x = pi_and_temp_change,
+          file = paste0(save_path, "species_pi_and_temp_diffs.csv"))
+```
+
+## Plot

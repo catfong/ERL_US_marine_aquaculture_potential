@@ -1,0 +1,204 @@
+---
+title: "Maps breaks code"
+output: html_document
+date: "2023-08-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+The objective of this Rmd is to determine the scales that should be used in the map figures for the publication.
+
+Packages
+```{r}
+library(tidyverse)
+library(terra)
+library(ggplot2)
+library(ggmap)
+library(cowplot)
+library(rnaturalearth)
+library(tidyterra)
+library(ggrepel)
+library(ggpubr)
+```
+
+File paths
+```{r}
+index_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/mean_index/"
+count_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/counts/"
+#state_shapes_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_shapes/"
+states_list_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_waters/"
+zeros_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/zeros/rasters/"
+figure_save_path <- "/home/shares/aquaculture/AOA_climate_change/figures/maps_for_each_taxa/seaweeds/"
+depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/"
+
+```
+
+
+Set up the zeros data for change calculations and the depth mask
+```{r}
+depth_mask <- terra::rast(paste0(depth_raster_path, "depth_200m.tif" ))
+
+zeros_data <- terra::rast(paste0(zeros_path, "federal_eez_zeros.tif"))
+
+zeros_data <- terra::mask(x = zeros_data,
+                          mask = depth_mask)
+
+```
+
+
+
+### Map Scales
+```{r}
+## Index - diffs
+current_index <- terra::rast(x = paste0(index_results_path, "mean_index_performance_126_2011_2030.tif"))
+current_index <- terra::mask(x = current_index,
+                             mask = depth_mask)
+current_index_df <- as.data.frame(current_index, xy = TRUE, cells = TRUE)
+
+index_245_2051_2070 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_245_2051_2070.tif"))
+index_245_2051_2070 <- terra::mask(x = index_245_2051_2070,
+                             mask = depth_mask)
+index_245_2051_2070_df <- as.data.frame(index_245_2051_2070, xy = TRUE, cells = TRUE)
+
+index_245_2071_2090 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_245_2071_2090.tif"))
+index_245_2071_2090 <- terra::mask(x = index_245_2071_2090,
+                             mask = depth_mask)
+index_245_2071_2090_df <- as.data.frame(index_245_2071_2090, xy = TRUE, cells = TRUE)
+
+index_585_2051_2070 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_585_2051_2070.tif"))
+index_585_2051_2070 <- terra::mask(x = index_585_2051_2070,
+                             mask = depth_mask)
+index_585_2051_2070_df <- as.data.frame(index_585_2051_2070, xy = TRUE, cells = TRUE)
+
+index_585_2071_2090 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_585_2071_2090.tif"))
+index_585_2071_2090 <- terra::mask(x = index_585_2071_2090,
+                             mask = depth_mask)
+index_585_2071_2090_df <- as.data.frame(index_585_2071_2090, xy = TRUE, cells = TRUE)
+
+## max for current
+max(current_index_df[4:7])
+max(index_245_2051_2070_df[4:7])
+max(index_245_2071_2090_df[4:7])
+max(index_585_2051_2070_df[4:7])
+max(index_585_2071_2090_df[4:7])
+
+## max and min for differences
+summary(sum(index_245_2051_2070, zeros_data) - sum(current_index, zeros_data))
+summary(sum(index_245_2071_2090, zeros_data) - sum(current_index, zeros_data))
+summary(sum(index_585_2051_2070, zeros_data) - sum(current_index, zeros_data))
+summary(sum(index_585_2071_2090, zeros_data) - sum(current_index, zeros_data))
+
+```
+
+
+```{r}
+## index maps
+current_index_limits <- c(0, 0.75)
+current_index_breaks <- c(0, .25, .50, .75)
+
+change_index_limits <- c(-.30, .30)
+change_index_breaks <-  c(-.30, -.15, 0, .15, .30)
+
+```
+
+
+```{r}
+## count - diffs
+current_count <- terra::rast(x = paste0(count_results_path, "count_126_2011_2030.tif"))
+current_count <- terra::mask(x = current_count,
+                             mask = depth_mask)
+current_count_df <- as.data.frame(current_count, xy = TRUE, cells = TRUE)
+
+count_245_2051_2070 <- terra::rast(x = paste0(count_results_path, "count_245_2051_2070.tif"))
+count_245_2051_2070 <- terra::mask(x = count_245_2051_2070,
+                             mask = depth_mask)
+count_245_2051_2070_df <- as.data.frame(count_245_2051_2070, xy = TRUE, cells = TRUE)
+
+count_245_2071_2090 <- terra::rast(x = paste0(count_results_path, "count_245_2071_2090.tif"))
+count_245_2071_2090 <- terra::mask(x = count_245_2071_2090,
+                             mask = depth_mask)
+count_245_2071_2090_df <- as.data.frame(count_245_2071_2090, xy = TRUE, cells = TRUE)
+
+count_585_2051_2070 <- terra::rast(x = paste0(count_results_path, "count_585_2051_2070.tif"))
+count_585_2051_2070 <- terra::mask(x = count_585_2051_2070,
+                             mask = depth_mask)
+count_585_2051_2070_df <- as.data.frame(count_585_2051_2070, xy = TRUE, cells = TRUE)
+
+count_585_2071_2090 <- terra::rast(x = paste0(count_results_path, "count_585_2071_2090.tif"))
+count_585_2071_2090 <- terra::mask(x = count_585_2071_2090,
+                             mask = depth_mask)
+count_585_2071_2090_df <- as.data.frame(count_585_2071_2090, xy = TRUE, cells = TRUE)
+
+## max for current
+max(current_count_df[5:7])
+max(count_245_2051_2070_df[5:7])
+max(count_245_2071_2090_df[5:7])
+max(count_585_2051_2070_df[5:7])
+max(count_585_2071_2090_df[5:7])
+
+## max and min for differences
+summary(sum(count_245_2051_2070, zeros_data) - sum(current_count, zeros_data))
+summary(sum(count_245_2071_2090, zeros_data) - sum(current_count, zeros_data))
+summary(sum(count_585_2051_2070, zeros_data) - sum(current_count, zeros_data))
+summary(sum(count_585_2071_2090, zeros_data) - sum(current_count, zeros_data))
+
+```
+
+Some quick histograms
+```{r}
+change_index_245_2051_2070 <- as.data.frame((sum(index_245_2051_2070, zeros_data) - sum(current_index, zeros_data)), xy = TRUE, cells = TRUE) %>% 
+  pivot_longer(cols = 4:7,
+               values_to = "change",
+               names_to = "taxa")
+change_index_245_2071_2090 <- as.data.frame((sum(index_245_2071_2090, zeros_data) - sum(current_index, zeros_data)), xy = TRUE, cells = TRUE) %>% 
+  pivot_longer(cols = 4:7,
+               values_to = "change",
+               names_to = "taxa")
+change_index_585_2051_2070 <- as.data.frame((sum(index_585_2051_2070, zeros_data) - sum(current_index, zeros_data)), xy = TRUE, cells = TRUE) %>% 
+  pivot_longer(cols = 4:7,
+               values_to = "change",
+               names_to = "taxa")
+change_index_585_2071_2090 <- as.data.frame((sum(index_585_2071_2090, zeros_data) - sum(current_index, zeros_data)), xy = TRUE, cells = TRUE) %>% 
+  pivot_longer(cols = 4:7,
+               values_to = "change",
+               names_to = "taxa")
+
+
+ggplot(data = change_index_245_2051_2070, aes(x = change)) +
+  geom_histogram() + facet_wrap(facets = "taxa")
+
+ggplot(data = change_index_245_2071_2090, aes(x = change)) +
+  geom_histogram() + facet_wrap(facets = "taxa")
+
+ggplot(data = change_index_585_2051_2070, aes(x = change)) +
+  geom_histogram() + facet_wrap(facets = "taxa")
+
+ggplot(data = change_index_585_2071_2090, aes(x = change)) +
+  geom_histogram() + facet_wrap(facets = "taxa")
+```
+
+
+
+Count Limits and Breaks
+
+Taxa and all species scales need to be different for the count plots because they
+```{r}
+# setup for all species
+all_species_current_count_limits <- c(0, 20)
+all_species_current_count_breaks <- c(0, 5, 10, 15, 20)
+
+all_species_change_count_limits <- c(-12, 12)
+all_species_change_count_breaks <- c(-12, -6, 0, 6, 12)
+
+# setup for taxa
+taxa_current_count_limits <- c(0, 10)
+taxa_current_count_breaks <- c(0, 2, 4, 6, 8, 10)
+
+taxa_change_count_limits <- c(-12, 12)
+taxa_change_count_breaks <- c(-12, -6, 0, 6, 12)
+
+```

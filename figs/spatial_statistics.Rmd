@@ -1,0 +1,175 @@
+---
+title: "spatial statistics"
+output: html_document
+date: "2024-02-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+The objective of this Rmd is to develop some simple spatial stats for the publication.
+
+Packages
+```{r}
+library(tidyverse)
+library(terra)
+```
+
+File Paths
+```{r}
+eez_PI_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/mean_index/"
+index_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/mean_index/"
+count_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/counts/"
+states_list_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_waters/"
+depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/"
+
+```
+
+## What percentage of waters gets better and worse for all species and taxa?
+```{r}
+baseline <- terra::rast(paste0(eez_PI_path, "mean_index_performance_126_2011_2030.tif"))
+
+
+```
+
+```{r}
+depth_mask <- terra::rast(paste0(depth_raster_path, "depth_200m.tif"))
+
+current_raster <- terra::rast(paste0(eez_PI_path, "mean_index_performance_126_2011_2030.tif"))
+current_raster <- terra::mask(x = current_raster,
+                              mask = depth_mask)
+
+current_df <- as.data.frame(current_raster, xy = TRUE, cells = TRUE) 
+
+other_periods_and_scenarios <- list.files(eez_PI_path,
+                                          pattern = "126|245|585") 
+
+other_periods_and_scenarios <- other_periods_and_scenarios[!grepl("2011_2030", other_periods_and_scenarios)]
+
+other_periods_and_scenarios
+
+all_species_combined_df <- current_df %>% 
+  select(cell, x, y, current_all_species_mean_index = all_species_mean_index)
+
+fish_combined_df <- current_df %>% 
+  select(cell, x, y, current_fish_mean_index = fish_mean_index)
+
+seaweed_combined_df <- current_df %>% 
+  select(cell, x, y, current_seaweed_mean_index = seaweed_mean_index)
+
+mollusc_combined_df <- current_df %>% 
+  select(cell, x, y, current_mollusc_mean_index = mollusc_mean_index)
+
+for (i in 1:n_distinct(other_periods_and_scenarios)){
+  
+  time_scenario <- str_sub(string = other_periods_and_scenarios[i], 
+                           start = -17, 
+                           end = -5)
+  
+  next_time_and_scenario_rast <- terra::rast(paste0(eez_PI_path, other_periods_and_scenarios[i]))
+  
+  next_time_and_scenario_rast <- terra::mask(x = next_time_and_scenario_rast,
+                                             mask = depth_mask)
+  
+  next_time_and_scenario_df <- as.data.frame(next_time_and_scenario_rast, xy = TRUE, cells = TRUE) 
+  
+  names(next_time_and_scenario_df)[names(next_time_and_scenario_df) == "all_species_mean_index"] <- paste0("all_species_", time_scenario)
+  names(next_time_and_scenario_df)[names(next_time_and_scenario_df) == "fish_mean_index"] <- paste0("fish_", time_scenario)
+  names(next_time_and_scenario_df)[names(next_time_and_scenario_df) == "seaweed_mean_index"] <- paste0("seaweed_", time_scenario)
+  names(next_time_and_scenario_df)[names(next_time_and_scenario_df) == "mollusc_mean_index"] <- paste0("mollusc_", time_scenario)
+  
+  print(nrow(next_time_and_scenario_df))
+  
+  all_species_combined_df <- left_join(x = all_species_combined_df,
+                                       y = next_time_and_scenario_df %>% 
+                                         select(cell, x, y, 
+                                                paste0("all_species_", time_scenario)))
+  
+  fish_combined_df <- left_join(x = fish_combined_df,
+                                y = next_time_and_scenario_df %>% 
+                                  select(cell, x, y, 
+                                         paste0("fish_", time_scenario)))
+  
+  seaweed_combined_df <- left_join(x = seaweed_combined_df,
+                                   y = next_time_and_scenario_df %>% 
+                                     select(cell, x, y, 
+                                            paste0("seaweed_", time_scenario)))
+  
+  mollusc_combined_df <- left_join(x = mollusc_combined_df,
+                                   y = next_time_and_scenario_df %>% 
+                                     select(cell, x, y, 
+                                            paste0("mollusc_", time_scenario)))
+}
+```
+
+Calculate the change from current to 245_2050_2070
+```{r}
+all_species_change <- all_species_combined_df %>% 
+  select(cell, x , y, current_all_species_mean_index, all_species_245_2051_2070) %>% 
+  mutate(change = all_species_245_2051_2070 - current_all_species_mean_index) %>% 
+  mutate(direction = case_when(change > 0 ~ "increase",
+                               change < 0 ~ "decrease",
+                               change == 0 ~ "no change",
+                               TRUE ~ NA))
+
+cell_count <- nrow(all_species_change)
+
+all_species_change_id <- all_species_change %>% 
+  group_by(direction) %>% 
+  summarise(direction_count = n()) %>% 
+  mutate(percent = (direction_count/cell_count) *100)
+
+############################
+
+fish_change <- fish_combined_df %>% 
+  select(cell, x , y, current_fish_mean_index, fish_245_2051_2070) %>% 
+  mutate(change = fish_245_2051_2070 - current_fish_mean_index) %>% 
+  mutate(direction = case_when(change > 0 ~ "increase",
+                               change < 0 ~ "decrease",
+                               change == 0 ~ "no change",
+                               TRUE ~ NA))
+
+cell_count <- nrow(fish_change)
+
+fish_change_id <- fish_change %>% 
+  group_by(direction) %>% 
+  summarise(direction_count = n()) %>% 
+  mutate(percent = (direction_count/cell_count) *100)
+
+############################
+
+seaweed_change <- seaweed_combined_df %>% 
+  select(cell, x , y, current_seaweed_mean_index, seaweed_245_2051_2070) %>% 
+  mutate(change = seaweed_245_2051_2070 - current_seaweed_mean_index) %>% 
+  mutate(direction = case_when(change > 0 ~ "increase",
+                               change < 0 ~ "decrease",
+                               change == 0 ~ "no change",
+                               TRUE ~ NA))
+
+cell_count <- nrow(seaweed_change)
+
+seaweed_change_id <- seaweed_change %>% 
+  group_by(direction) %>% 
+  summarise(direction_count = n()) %>% 
+  mutate(percent = (direction_count/cell_count) *100)
+
+##############################
+mollusc_change <- mollusc_combined_df %>% 
+  select(cell, x , y, current_mollusc_mean_index, mollusc_245_2051_2070) %>% 
+  mutate(change = mollusc_245_2051_2070 - current_mollusc_mean_index) %>% 
+  mutate(direction = case_when(change > 0 ~ "increase",
+                               change < 0 ~ "decrease",
+                               change == 0 ~ "no change",
+                               TRUE ~ NA))
+
+cell_count <- nrow(mollusc_change)
+
+mollusc_change_id <- mollusc_change %>% 
+  group_by(direction) %>% 
+  summarise(direction_count = n()) %>% 
+  mutate(percent = (direction_count/cell_count) *100)
+```
+

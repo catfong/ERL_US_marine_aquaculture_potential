@@ -1,0 +1,62 @@
+---
+title: "maps_for_reviewer"
+output: html_document
+date: "2024-07-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+The objective of this Rmd is to develop a few simple maps that were requested by one of the reviewers. These include current SST and a map of US waters that meet our depth constraint and which waters are exlcuded by that constraint.
+
+Packages
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(terra)
+library(tidyterra)
+```
+
+File Paths
+```{r}
+depth_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/"
+depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/halleys_company/"
+
+temp_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/sst/"
+```
+
+## Map for temperature
+```{r}
+temp <- rast(paste0(temp_path, "sst_126_2011_2030.tif"))
+
+terra::plot(temp$mean_2011_2030)
+```
+
+## Map for depth
+```{r}
+depth <- rast(paste0(depth_path, "depth_200m.tif"))
+
+# read in raw depth data
+depth_raster <- terra::rast(paste0(depth_raster_path, "ensemble_stats_thetao_ssp126_5.0.nc"),
+                            # clarify that netCDF driver is correct
+                            opts = "NETCDF",    
+                            # read depth layer from file
+                            subds = "depth")
+
+# mask the depth data to our area of interest (US EEZ)
+depth_raster <- terra::mask(x = depth_raster,   
+                            # only need to use the one layer from the mask raster
+                            mask = temp[[1]])
+
+depth_raster <- terra::ifel(depth_raster > 200,
+                            yes = 0,
+                            no = 1)
+
+terra::plot(depth_raster)
+```
+
+
+

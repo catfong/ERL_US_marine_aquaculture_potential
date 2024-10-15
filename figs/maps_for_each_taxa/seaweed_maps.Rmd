@@ -1,0 +1,2255 @@
+---
+title: "Seaweed Taxa Maps"
+output: html_document
+date: "2023-08-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+The objective of this Rmd is to develop figures for the publication.
+
+Packages
+```{r}
+library(tidyverse)
+library(terra)
+library(ggplot2)
+library(ggmap)
+library(cowplot)
+library(rnaturalearth)
+library(tidyterra)
+library(ggrepel)
+library(ggpubr)
+```
+
+File paths
+```{r}
+index_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/mean_index/"
+count_results_path <- "/home/shares/aquaculture/AOA_climate_change/performance_calcs/counts/"
+#state_shapes_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_shapes/"
+states_list_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/state_waters/"
+zeros_path <- "/home/shares/aquaculture/AOA_climate_change/spatial/zeros/rasters/"
+figure_save_path <- "/home/shares/aquaculture/AOA_climate_change/figures/maps_for_each_taxa/seaweeds/"
+depth_raster_path <- "/home/shares/aquaculture/AOA_climate_change/pressure_prep/"
+
+```
+
+Set up state outlines
+```{r}
+state_list <- terra::vect(x = paste0(states_list_path, "state_waters.shp"))
+state_list <- state_list$state
+state_list <- state_list[!str_detect(state_list, pattern = "Florida")]
+state_list <- c(state_list, "Florida")
+
+
+
+USA_state_shapes <- ne_states(iso_a2 = "US", returnclass = "sf")
+
+USA_state_shapes <- USA_state_shapes %>% 
+  select(name, postal, geometry) %>% 
+  filter(stringr::str_detect(string = name,            
+                    pattern = paste(state_list, collapse = "|")))
+
+project_crs <- crs(terra::rast(x = paste0(index_results_path, "mean_index_performance_126_2011_2030.tif")))
+
+USA_state_shapes <- terra::vect(USA_state_shapes)
+crs(USA_state_shapes) <- project_crs
+
+USA_state_shapes <- terra::crop(x = USA_state_shapes,
+                                y = terra::rast(x = paste0(index_results_path, "mean_index_performance_126_2011_2030.tif")))
+
+
+```
+
+Set up the zeros data for change calculations and the depth mask
+```{r}
+depth_mask <- terra::rast(paste0(depth_raster_path, "depth_200m.tif" ))
+
+zeros_data <- terra::rast(paste0(zeros_path, "federal_eez_zeros.tif"))
+
+zeros_data <- terra::mask(x = zeros_data,
+                          mask = depth_mask)
+
+```
+
+Data Set Up
+```{r}
+current_index <- terra::rast(x = paste0(index_results_path, "mean_index_performance_126_2011_2030.tif"))
+current_index <- terra::mask(x = current_index,
+                             mask = depth_mask)
+current_index <- current_index$seaweed_mean_index
+current_index_df <- as.data.frame(current_index, xy = TRUE, cells = TRUE)
+
+current_count <- terra::rast(x = paste0(count_results_path, "count_126_2011_2030.tif"))
+current_count <- terra::mask(x = current_count,
+                             mask = depth_mask)
+current_count <- current_count$seaweed_count
+current_count_df <- as.data.frame(current_count, xy = TRUE, cells = TRUE)
+
+# 245 Scenario
+index_245_2051_2070 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_245_2051_2070.tif"))
+index_245_2051_2070 <- terra::mask(x = index_245_2051_2070,
+                                   mask = depth_mask)
+index_245_2051_2070 <- index_245_2051_2070$seaweed_mean_index
+index_245_2051_2070_df <- as.data.frame(index_245_2051_2070, xy = TRUE, cells = TRUE)
+
+
+count_245_2051_2070 <- terra::rast(x = paste0(count_results_path, "count_245_2051_2070.tif"))
+count_245_2051_2070 <- terra::mask(x = count_245_2051_2070,
+                                   mask = depth_mask)
+count_245_2051_2070 <- count_245_2051_2070$seaweed_count
+count_245_2051_2070_df <- as.data.frame(count_245_2051_2070, xy = TRUE, cells = TRUE)
+
+
+index_245_2071_2090 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_245_2071_2090.tif"))
+index_245_2071_2090 <- terra::mask(x = index_245_2071_2090,
+                                   mask = depth_mask)
+index_245_2071_2090 <- index_245_2071_2090$seaweed_mean_index
+index_245_2071_2090_df <- as.data.frame(index_245_2071_2090, xy = TRUE, cells = TRUE)
+
+
+count_245_2071_2090 <- terra::rast(x = paste0(count_results_path, "count_245_2071_2090.tif"))
+count_245_2071_2090 <- terra::mask(x = count_245_2071_2090,
+                                   mask = depth_mask)
+count_245_2071_2090 <- count_245_2071_2090$seaweed_count
+count_245_2071_2090_df <- as.data.frame(count_245_2071_2090, xy = TRUE, cells = TRUE)
+
+# 585 scenario
+index_585_2051_2070 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_585_2051_2070.tif"))
+index_585_2051_2070 <- terra::mask(x = index_585_2051_2070,
+                                   mask = depth_mask)
+index_585_2051_2070 <- index_585_2051_2070$seaweed_mean_index
+index_585_2051_2070_df <- as.data.frame(index_585_2051_2070, xy = TRUE, cells = TRUE)
+
+
+count_585_2051_2070 <- terra::rast(x = paste0(count_results_path, "count_585_2051_2070.tif"))
+count_585_2051_2070 <- terra::mask(x = count_585_2051_2070,
+                                   mask = depth_mask)
+count_585_2051_2070 <- count_585_2051_2070$seaweed_count
+count_585_2051_2070_df <- as.data.frame(count_585_2051_2070, xy = TRUE, cells = TRUE)
+
+
+index_585_2071_2090 <- terra::rast(x = paste0(index_results_path, "mean_index_performance_585_2071_2090.tif"))
+index_585_2071_2090 <- terra::mask(x = index_585_2071_2090,
+                                   mask = depth_mask)
+index_585_2071_2090 <- index_585_2071_2090$seaweed_mean_index
+index_585_2071_2090_df <- as.data.frame(index_585_2071_2090, xy = TRUE, cells = TRUE)
+
+
+count_585_2071_2090 <- terra::rast(x = paste0(count_results_path, "count_585_2071_2090.tif"))
+count_585_2071_2090 <- terra::mask(x = count_585_2071_2090,
+                                   mask = depth_mask)
+count_585_2071_2090 <- count_585_2071_2090$seaweed_count
+count_585_2071_2090_df <- as.data.frame(count_585_2071_2090, xy = TRUE, cells = TRUE)
+```
+
+
+### Map Scales
+Index:
+```{r}
+## index maps
+current_index_limits <- c(0, 0.75)
+current_index_breaks <- c(0, .25, .50, .75)
+
+change_index_limits <- c(-.10, .10)
+change_index_breaks <- c(-.10, -.05, 0, .05, .10)
+```
+
+Count:
+Taxa and all species scales need to be different for the count plots because they
+```{r}
+# setup for all species
+all_species_current_count_limits <- c(0, 20)
+all_species_current_count_breaks <- c(0, 5, 10, 15, 20)
+
+all_species_change_count_limits <- c(-12, 12)
+all_species_change_count_breaks <- c(-12, -6, 0, 6, 12)
+
+# setup for taxa
+taxa_current_count_limits <- c(0, 10)
+taxa_current_count_breaks <- c(0, 2, 4, 6, 8, 10)
+
+taxa_change_count_limits <- c(-12, 12)
+taxa_change_count_breaks <- c(-12, -6, 0, 6, 12)
+
+```
+
+
+## Index
+
+### Current Index
+Using tidyterra
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = current_index,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "viridi" #previous palettes: "deep"
+dir <- -1 # previous direction: 1
+
+mainland_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = current_index_limits,
+                        breaks = current_index_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Mean PI") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white",
+                                    color = "white"),
+    panel.border = element_rect(color = NA, fill = NA),
+    plot.background = element_rect(fill = "white",
+                                    color = "white"))+  
+  ggtitle("      Seaweeds Mean Performance Index Under Current Ocean Conditions") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+mainland_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = current_index,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = current_index_limits,
+                        breaks = current_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+#alaska_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = current_index,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = current_index_limits,
+                        breaks = current_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_plot
+```
+
+```{r}
+current_index_plot<-
+  ggdraw() +
+  draw_plot(mainland_plot) +
+  draw_plot(alaska_plot, width=0.30, height=0.30,  x = 0.23, y = .495)+
+  draw_plot(hawaii_plot, width=0.25, height=0.20,  x = 0.10, y = .142)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE: this plot does not look like the plot saved
+# View the saved file to see the final output proportions
+current_index_plot
+
+ggsave(plot = current_index_plot,
+       filename = "current_index_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+### index change to ssp2 2051-2070
+Data setup
+```{r}
+index_change_245_2051_2070 <- sum(index_245_2051_2070, zeros_data) - sum(current_index, zeros_data)
+summary(index_change_245_2051_2070)
+
+index_change_245_2051_2070 <- ifel(test = index_change_245_2051_2070 > change_index_limits[2],
+                                   yes = change_index_limits[2],
+                                   no = ifel(index_change_245_2051_2070 < change_index_limits[1],
+                                             yes = change_index_limits[1],
+                                             no = index_change_245_2051_2070))
+
+summary(index_change_245_2051_2070)
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = index_change_245_2051_2070,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_index_change_245_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nMean PI") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Mean Performance Index from Current Conditions\n      to SSP2 2051-2071") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+mainland_index_change_245_2051_2070_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = index_change_245_2051_2070,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_index_change_245_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+alaska_index_change_245_2051_2070_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = index_change_245_2051_2070,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_index_change_245_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+hawaii_index_change_245_2051_2070_plot
+```
+
+```{r}
+index_change_245_2051_2070_plot <-
+  ggdraw() +
+  draw_plot(mainland_index_change_245_2051_2070_plot) +
+  draw_plot(alaska_index_change_245_2051_2070_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_index_change_245_2051_2070_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE: this does not match the look of the saved output
+index_change_245_2051_2070_plot
+
+ggsave(plot = index_change_245_2051_2070_plot,
+       filename = "index_change_245_2051_2070_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+### index change to ssp2 2071-2090
+Data setup
+```{r}
+index_change_245_2071_2090 <- sum(index_245_2071_2090, zeros_data) - sum(current_index, zeros_data) 
+
+index_change_245_2071_2090 <- ifel(test = index_change_245_2071_2090 > change_index_limits[2],
+                                   yes = change_index_limits[2],
+                                   no = ifel(index_change_245_2071_2090 < change_index_limits[1],
+                                             yes = change_index_limits[1],
+                                             no = index_change_245_2071_2090))
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = index_change_245_2071_2090,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_index_change_245_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nMean PI") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Mean Performance Index from Current Conditions\n      to SSP2 2071-2090") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+#mainland_index_change_245_2071_2090_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = index_change_245_2071_2090,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_index_change_245_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+#alaska_index_change_245_2071_2090_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = index_change_245_2071_2090,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_index_change_245_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_index_change_245_2071_2090_plot
+```
+
+```{r}
+index_change_245_2071_2090_plot <-
+  ggdraw() +
+  draw_plot(mainland_index_change_245_2071_2090_plot) +
+  draw_plot(alaska_index_change_245_2071_2090_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_index_change_245_2071_2090_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+index_change_245_2071_2090_plot
+
+ggsave(plot = index_change_245_2071_2090_plot,
+       filename = "index_change_245_2071_2090_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+### index change to ssp5 2051-2070
+Data setup
+```{r}
+index_change_585_2051_2070 <- sum(index_585_2051_2070, zeros_data) - sum(current_index, zeros_data)
+
+index_change_585_2051_2070 <- ifel(test = index_change_585_2051_2070 > change_index_limits[2],
+                                   yes = change_index_limits[2],
+                                   no = ifel(index_change_585_2051_2070 < change_index_limits[1],
+                                             yes = change_index_limits[1],
+                                             no = index_change_585_2051_2070))
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = index_change_585_2051_2070,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_index_change_585_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nMean PI") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Mean Performance Index from Current Conditions\n      to SSP5 2051-2071") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+#mainland_index_change_585_2051_2070_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = index_change_585_2051_2070,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_index_change_585_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+#alaska_index_change_585_2051_2070_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = index_change_585_2051_2070,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_index_change_585_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_index_change_585_2051_2070_plot
+```
+
+```{r}
+index_change_585_2051_2070_plot <-
+  ggdraw() +
+  draw_plot(mainland_index_change_585_2051_2070_plot) +
+  draw_plot(alaska_index_change_585_2051_2070_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_index_change_585_2051_2070_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE this plot looks different than saved plot
+index_change_585_2051_2070_plot
+
+ggsave(plot = index_change_585_2051_2070_plot,
+       filename = "index_change_585_2051_2070_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+### index change to ssp5 2071-2090
+Data setup
+```{r}
+index_change_585_2071_2090 <- sum(index_585_2071_2090, zeros_data) - sum(current_index, zeros_data) 
+
+index_change_585_2071_2090 <- ifel(test = index_change_585_2071_2090 > change_index_limits[2],
+                                   yes = change_index_limits[2],
+                                   no = ifel(index_change_585_2071_2090 < change_index_limits[1],
+                                             yes = change_index_limits[1],
+                                             no = index_change_585_2071_2090))
+
+summary(index_change_585_2071_2090)
+
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = index_change_585_2071_2090,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_index_change_585_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nMean PI") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Mean Performance Index from Current Conditions\n      to SSP5 2071-2090") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+mainland_index_change_585_2071_2090_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = index_change_585_2071_2090,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_index_change_585_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+alaska_index_change_585_2071_2090_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = index_change_585_2071_2090,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_index_change_585_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = change_index_limits,
+                        breaks = change_index_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_index_change_585_2071_2090_plot
+```
+
+```{r}
+index_change_585_2071_2090_plot <-
+  ggdraw() +
+  draw_plot(mainland_index_change_585_2071_2090_plot) +
+  draw_plot(alaska_index_change_585_2071_2090_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_index_change_585_2051_2070_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE this plot looks different than saved plot
+index_change_585_2071_2090_plot
+
+ggsave(plot = index_change_585_2071_2090_plot,
+       filename = "index_change_585_2071_2090_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+## count
+pretty much do the exact same as above but use count data
+
+### Current Count
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# add in the zeros data for count graphing
+current_count <- sum(current_count, zeros_data, na.rm = TRUE)
+
+# load main raster
+mainland_raster <- crop(x = current_count,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "viridi" #previous palettes: "deep"
+dir <- -1 # previous direction: 1
+
+mainland_current_count <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_current_count_limits,
+                        breaks = taxa_current_count_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Species \nCount") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    # background color
+    panel.background = element_rect(fill = "white",
+                                    color = "white"),
+    panel.border = element_rect(color = NA, fill = NA),
+    plot.background = element_rect(fill = "white",
+                                    color = "white")) +  
+  ggtitle("      Seaweeds Viable Species Count Under Current Ocean Conditions") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+mainland_current_count
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster_count <- crop(x = current_count,
+                            y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_current_count <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster_count) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = "deep",
+                        direction = 1,
+                        limits = taxa_current_count_limits,
+                        breaks = taxa_current_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+alaska_current_count
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster_count <- crop(x = current_count,
+                            y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_current_count <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster_count) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = "deep",
+                        direction = 1,
+                        limits = taxa_current_count_limits,
+                        breaks = taxa_current_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+hawaii_current_count
+```
+
+```{r}
+count_current_plot <- ggdraw() +
+  draw_plot(mainland_current_count) +
+  draw_plot(alaska_current_count, width=0.30, height=0.30,  x = 0.23, y = .495)+
+  draw_plot(hawaii_current_count, width=0.25, height=0.20,  x = 0.10, y = .142)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+count_current_plot
+
+ggsave(plot = count_current_plot,
+       filename = "count_current_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+### count change to ssp2 2051-2070
+Data setup
+```{r}
+count_change_245_2051_2070 <- sum(count_245_2051_2070, zeros_data, na.rm = TRUE) - sum(current_count, zeros_data, na.rm = TRUE)
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = count_change_245_2051_2070,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_count_change_245_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nCount") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Viable Species Count Under Current Ocean Conditions\n      to SSP2 2051-2071") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+#mainland_count_change_245_2051_2070_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = count_change_245_2051_2070,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_count_change_245_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+
+#alaska_count_change_245_2051_2070_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = count_change_245_2051_2070,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_count_change_245_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_count_change_245_2051_2070_plot
+```
+
+```{r, warning=FALSE}
+count_change_245_2051_2070_plot <-
+  ggdraw() +
+  draw_plot(mainland_count_change_245_2051_2070_plot) +
+  draw_plot(alaska_count_change_245_2051_2070_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_count_change_245_2051_2070_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE: this does not match the look of the saved output
+count_change_245_2051_2070_plot
+
+ggsave(plot = count_change_245_2051_2070_plot,
+       filename = "count_change_245_2051_2070_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+### count change to ssp2 2071-2090
+Data setup
+```{r}
+count_change_245_2071_2090 <- sum(count_245_2071_2090, zeros_data, na.rm = TRUE) - sum(current_count, zeros_data, na.rm = TRUE)
+
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = count_change_245_2071_2090,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_count_change_245_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nCount") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Viable Species Count Under Current Ocean Conditions\n      to SSP2 2071-2090") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+mainland_count_change_245_2071_2090_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = count_change_245_2071_2090,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_count_change_245_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+#alaska_count_change_245_2071_2090_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = count_change_245_2071_2090,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_count_change_245_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_count_change_245_2071_2090_plot
+```
+
+```{r, warning=FALSE}
+count_change_245_2071_2090_plot <-
+  ggdraw() +
+  draw_plot(mainland_count_change_245_2071_2090_plot) +
+  draw_plot(alaska_count_change_245_2071_2090_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_count_change_245_2071_2090_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+count_change_245_2071_2090_plot
+
+ggsave(plot = count_change_245_2071_2090_plot,
+       filename = "count_change_245_2071_2090_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+
+### count change to ssp5 2051-2070
+Data setup
+```{r}
+count_change_585_2051_2070 <- sum(count_585_2051_2070, zeros_data, na.rm = TRUE) - sum(current_count, zeros_data, na.rm = TRUE)
+
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = count_change_585_2051_2070,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_count_change_585_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nCount") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Viable Species Count Under Current Ocean Conditions\n      to SSP5 2051-2071") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+#mainland_count_change_585_2051_2070_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = count_change_585_2051_2070,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_count_change_585_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+#alaska_count_change_585_2051_2070_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = count_change_585_2051_2070,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_count_change_585_2051_2070_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_count_change_585_2051_2070_plot
+```
+
+```{r, warning=FALSE}
+count_change_585_2051_2070_plot <-
+  ggdraw() +
+  draw_plot(mainland_count_change_585_2051_2070_plot) +
+  draw_plot(alaska_count_change_585_2051_2070_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_count_change_585_2051_2070_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE this plot looks different than saved plot
+count_change_585_2051_2070_plot
+
+ggsave(plot = count_change_585_2051_2070_plot,
+       filename = "count_change_585_2051_2070_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
+
+### count change to ssp5 2071-2090
+Data setup
+```{r}
+count_change_585_2071_2090 <- sum(count_585_2071_2090, zeros_data, na.rm = TRUE) - sum(current_count, zeros_data, na.rm = TRUE)
+```
+
+mainland
+```{r, warning = FALSE}
+# xlow, xhigh, ylow, yhigh
+mainland_ext <- c(-127, -60, 24, 50)
+
+# load main raster
+mainland_raster <- crop(x = count_change_585_2071_2090,
+                        y = mainland_ext)
+
+# remove non-mainland states
+mainland_states <- USA_state_shapes %>% 
+  filter(!name %in% c("Alaska", "Hawaii"))
+
+# retrieve small states centroids for labeling
+MD_DE_NJ_RI <- mainland_states %>% 
+  filter(name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")) %>% 
+  centroids() %>% 
+  as.data.frame(geom = "XY")
+
+# Choose palette and direction for maps
+pal <- "muted" #previous palette: "bl_yl_rd"
+dir <- -1 # previous direction: -1
+
+mainland_count_change_585_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = mainland_raster) +
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        #background color fill
+                        na.value = "grey80",
+                        name = "Change \nCount") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) + 
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) +  
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = mainland_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  theme(# change the legend position and direction
+    legend.position = c(.9,.3),
+    legend.direction = "vertical",
+    plot.title.position = "panel",
+    # background color
+    panel.background = element_rect(fill = "white", 
+                                    color = NA),
+    panel.border = element_rect(colour = NA, fill=NA))+  
+  ggtitle("      Change in Seaweeds Viable Species Count Under Current Ocean Conditions\n      to SSP5 2071-2090") +
+  # add in labels for states
+  geom_spatvector_text(data = mainland_states %>% 
+                         filter(!name %in% c("Maryland", "Delaware", "New Jersey", "Rhode Island")),
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5)+
+  # add in labels for states that need to be moved a bit
+  geom_text_repel(data = MD_DE_NJ_RI,
+                  aes(x = x,
+                      y = y,
+                      label = postal),
+                  # order of nudges: MD, DE, NJ, RI
+                  nudge_x = c(-1.5,-1, -0.5,0),
+                  nudge_y = c(1.5,1.5,1.5,-1.5),
+                  alpha = 0.5,
+                  size = 2.5) 
+
+mainland_count_change_585_2071_2090_plot
+```
+
+Alaska
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+alaska_ext <- c(-188, -129, 50, 94)
+
+alaska_raster <- crop(x = count_change_585_2071_2090,
+                      y = alaska_ext)
+
+# isolate Alaska shape
+alaska_states <- USA_state_shapes %>% 
+  filter(name %in% c("Alaska"))
+
+alaska_count_change_585_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = alaska_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = alaska_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"))+  
+  #make a border
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=0.25)) +
+  # add in the alaska label
+  geom_spatvector_text(data = alaska_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1)
+alaska_count_change_585_2071_2090_plot
+```
+
+Hawaii
+```{r, warning=FALSE}
+# xlow, xhigh, ylow, yhigh
+hawaii_ext <- c(-166, -154, 15, 25)
+
+hawaii_raster <- crop(x = count_change_585_2071_2090,
+                      y = hawaii_ext)
+# isolate Hawaii shape
+hawaii_states <- USA_state_shapes %>% 
+  filter(name %in% c("Hawaii"))
+
+hawaii_states <- crop(x = hawaii_states,
+                      y = hawaii_ext)
+
+hawaii_count_change_585_2071_2090_plot <- ggplot() +
+  # pull in the raster data
+  geom_spatraster(data = hawaii_raster) +
+  # fill in scale details and color of background
+  scale_fill_whitebox_c(palette = pal,
+                        direction = dir,
+                        limits = taxa_change_count_limits,
+                        breaks = taxa_change_count_breaks,
+                        # background color fill
+                        na.value = "grey80") +
+  #remove x y breaks
+  scale_x_continuous(labels = NULL, breaks = 0) +
+  scale_y_continuous(labels = NULL, breaks = NULL, n.breaks = 0) + 
+  # remove x y labels as they are coordinates
+  labs(x = "",
+       y = "") +
+  # add in the state boundary lines
+  geom_spatvector(data = hawaii_states,
+                  alpha = 0.6,
+                  fill = "white",
+                  color = "#7d7d7d") +
+  theme_void()+
+  # don't show the legend since we are adding this to our mainland figure
+  theme(legend.position = "none",
+        # background color
+        panel.background = element_rect(fill = "grey80"),
+        # add in a border
+        panel.border = element_rect(colour = "black", fill=NA, size=0.25))+  
+  geom_spatvector_text(data = hawaii_states,
+                       aes(label = postal),
+                       alpha = 0.5,
+                       size = 2.5,
+                       nudge_y = 1,
+                       nudge_x = -8)
+#hawaii_count_change_585_2071_2090_plot
+```
+
+```{r, warning = FALSE}
+count_change_585_2071_2090_plot <-
+  ggdraw() +
+  draw_plot(mainland_count_change_585_2071_2090_plot) +
+  draw_plot(alaska_count_change_585_2071_2090_plot, width=0.30, height=0.30,  x = 0.23, y = .475)+
+  draw_plot(hawaii_count_change_585_2051_2070_plot, width=0.25, height=0.20,  x = 0.10, y = .122)+
+  theme(panel.background = element_rect(fill = 'white',
+                                        color = "white"),
+        plot.background = element_rect(fill = 'white',
+                                        color = "white")) 
+
+# NOTE this plot looks different than saved plot
+count_change_585_2071_2090_plot
+
+ggsave(plot = count_change_585_2071_2090_plot,
+       filename = "count_change_585_2071_2090_plot.pdf",
+       device = "pdf",
+       path = figure_save_path,
+       width = 7,
+       height = 5,
+       units = "in")
+```
